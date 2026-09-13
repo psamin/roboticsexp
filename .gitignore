@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Run outputs (checkpoints, logs, videos) live on the cluster; pull them with scripts/pull_runs.sh.
+runs/
