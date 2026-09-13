@@ -1,0 +1,28 @@
+[project]
+name = "roboticsexp"
+version = "0.1.0"
+description = "How much observation delay can a PPO PandaPickCube policy tolerate? (MuJoCo Playground)"
+requires-python = "==3.12.*"
+dependencies = [
+    "playground",
+    # brax 0.14.2 (latest) calls jax.device_put_replicated, which jax 0.10.0 removed.
+    # Found by the smoke test (job 7439): AttributeError in brax/training/agents/ppo/train.py:756.
+    "jax<0.10",
+    # mediapy shells out to ffmpeg, which neither the Mac nor the cluster has on PATH.
+    "imageio-ffmpeg",
+]
+
+[project.optional-dependencies]
+# Linux GPU nodes only; the upstream README installs jax[cuda12].
+cuda = ["jax[cuda12]; sys_platform == 'linux'"]
+
+[tool.uv]
+package = false
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.uv.sources]
+# Upstream main on 2026-09-08. Newer than PyPI 0.2.0; the README recommends installing from source.
+playground = { git = "https://github.com/google-deepmind/mujoco_playground", rev = "4057c147714b6ac09b395377f1a1724bbeacc4d3" }
