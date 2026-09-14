@@ -1,10 +1,11 @@
-"""Evaluation-only observation delay. EXERCISE: you implement the two TODOs.
+"""Evaluation-only observation delay. Not implemented yet: both functions raise
+NotImplementedError, so delayexp.evaluate supports only --delays none for now.
 
 Goal: at control step t, the policy acts on the observation from step t - d,
 while the simulator keeps advancing every control step. Nothing sleeps and
 physics never pauses; the policy just sees a stale observation.
 
-Conventions the evaluator (delayexp/evaluate.py) will rely on:
+Conventions the evaluator (delayexp/evaluate.py) relies on:
   * Each function handles ONE environment. obs has shape (66,) for
     PandaPickCube. The evaluator vmaps over environments.
   * delay_steps (d) is a Python int >= 0, fixed for a whole evaluation. Static
@@ -17,7 +18,6 @@ Conventions the evaluator (delayexp/evaluate.py) will rely on:
 """
 
 import jax
-import jax.numpy as jp  # noqa: F401  (you'll probably want it)
 
 
 def init_buffer(first_obs: jax.Array, delay_steps: int) -> jax.Array:
@@ -28,10 +28,9 @@ def init_buffer(first_obs: jax.Array, delay_steps: int) -> jax.Array:
       delay_steps: d >= 0.
 
     Returns:
-      A buffer array. You choose its shape; document it here. It must be able
-      to serve the observation from d steps ago.
+      A buffer array able to serve the observation from d steps ago.
     """
-    # TODO(you): decide what the buffer holds before d real observations exist.
+    # TODO: decide what the buffer holds before d real observations exist.
     raise NotImplementedError
 
 
@@ -47,7 +46,7 @@ def push_and_read(
 
     Returns:
       (new_buffer, delayed_obs): delayed_obs has shape (obs_dim,). For t >= d it
-      is the observation from step t - d. For t < d, document what you return.
+      is the observation from step t - d.
     """
-    # TODO(you)
+    # TODO
     raise NotImplementedError
