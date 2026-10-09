@@ -5,3 +5,12 @@ __pycache__/
 
 # Run outputs (checkpoints, logs, videos) live on the cluster; pull them with scripts/pull_runs.sh.
 runs/
+
+# so101: session logs, per-session camera presets, replay drafts and camera captures stay local.
+so101/logs/
+so101/presets/
+so101/drafts/
+*.png
+*.jpg
+*.mp4
+*.safetensors
