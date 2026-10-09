@@ -25,6 +25,8 @@ scripts run against is `~/Documents/GitHub/lerobot` (commit `e624f3f7`), environ
 | `home.py` | Save the arm's pose before a run and glide back to it afterwards, without dropping the arm. |
 | `rollout.sh`, `rollout.py` | Rollout session: keeps the GPU server and tunnel up; `begin` / `rest` / `success` / `fail` / `quit` (arrow keys, Voice Control, or `./rollout.sh <command>`). Logs results to `logs/rollouts-*.csv`. Motion settings in `presets/rollout_settings.json`, re-read at every rollout. |
 | `smooth_client.py` | LeRobot's robot client plus command damping (low-pass on joint targets, `SMOOTH_ALPHA`). |
+| `lerobot_to_armlab.py` | Convert a recorded LeRobot dataset into robotfpga `armlab` shards (96x96 top camera, joints normalized to [-1, 1] by the calibrated range) so TinyPolicy can train on real demos. Writes `norm.json` for mapping outputs back to the arm. |
+| `cluster/real_tiny.sbatch` | TinyPolicy on real demos: float BC → QAT → int8 export → golden vectors → HLS C model, in robotfpga's format (FPGA-ready). |
 | `cluster/train_smolvla.sbatch` | Fine-tune SmolVLA on a dataset (H200). |
 | `cluster/serve_policy.sbatch` | Serve a trained policy on the H200, localhost-only, for `policy.sh`. |
 | `test_policy_server.py` | Check a running server end to end with a recorded frame, without moving the arm. |
