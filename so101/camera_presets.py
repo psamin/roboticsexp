@@ -28,7 +28,7 @@ from pathlib import Path
 
 UVC = str(Path.home() / ".local/bin/uvc-util")
 PRESETS = Path(__file__).parent / "presets"
-LEROBOT_CMD = "/bin/lerobot-[a-z]|replay_record[.]py|record_session[.]py|demo_record[.]py|async_inference[.]robot_client"  # console scripts and our recorders
+LEROBOT_CMD = "/bin/lerobot-[a-z]|replay_record[.]py|record_session[.]py|demo_record[.]py|async_inference[.]robot_client|smooth_client[.]py"  # console scripts and our recorders
 SETTLE_S = 4
 MIN_BRIGHTNESS = 60  # mean pixel value (0-255) below which the scene is too dark to record well
 ANTI_FLICKER = ("power-line-frequency", "2")  # 60 Hz mains (US)

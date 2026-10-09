@@ -8,14 +8,15 @@
 #                       the pose it started from, the motors turn off, the server job is cancelled.
 #
 # Needs GT VPN. MODEL=<dir> overrides the model, KEEP_SERVER=1 keeps the server running after a stop,
-# MAX_STEP=<deg> caps each joint's move per control step (default 10).
+# MAX_STEP=<deg> caps each joint's move per control step (default 10). Smoothing: SMOOTH_ALPHA (command
+# low-pass, default 0.7), P_GAIN / I_GAIN / D_GAIN (servo PID, default 16 / 0 / 32).
 set -uo pipefail
 source "$(dirname "$0")/env.sh"
 LOGIN=pi34@planetexpress-login.cc.gatech.edu
 PORT=8080
 
 if [ "${1:-}" = stop ]; then
-  pkill -INT -f "async_inference.robot_client" && echo "Stopping the policy; the arm returns to its start pose." \
+  pkill -INT -f "smooth_client.py|async_inference.robot_client" && echo "Stopping the policy; the arm returns to its start pose." \
     || echo "No policy is running."
   exit 0
 fi
@@ -70,10 +71,11 @@ trap 'echo "Stopping the policy ..."' INT TERM
 start_camera_lock
 # disable_torque_on_disconnect=false keeps the arm held when the policy stops, until home.py takes over.
 # max_relative_target caps each joint's move per control step (degrees): a safety limit for first runs.
-"$PY" -m lerobot.async_inference.robot_client \
+"$PY" "$SO101/smooth_client.py" \
   --server_address=127.0.0.1:$PORT \
   "${FOLLOWER_ARGS[@]}" "--robot.cameras=$POLICY_CAMERAS" --robot.max_relative_target=${MAX_STEP:-10} \
   --robot.disable_torque_on_disconnect=false \
+  --robot.position_p_coefficient=${P_GAIN:-16} --robot.position_i_coefficient=${I_GAIN:-0} --robot.position_d_coefficient=${D_GAIN:-32} \
   --task="$TASK" --policy_type=smolvla --pretrained_name_or_path="$MODEL" --policy_device=cuda \
   --actions_per_chunk=50 --chunk_size_threshold=0.5 --aggregate_fn_name=weighted_average --fps=30 \
   2>&1 | tee "$LOG"
