@@ -21,9 +21,10 @@ scripts run against is `~/Documents/GitHub/lerobot` (commit `e624f3f7`), environ
 | `collect.sh` | `live N`: record teleop directly. `replay N`: teleop a demo, then the follower replays it while the cameras record. |
 | `demo_record.py`, `record_session.py`, `replay_record.py` | The recorders behind `collect.sh`, built on LeRobot's `record_loop` and dataset writer. |
 | `keys.py`, `VOICE.md` | Arrow-key controls and the macOS Voice Control phrases that press them. |
-| `run_policy.sh` | Run a trained policy: model on a cluster GPU, this Mac drives the arm through an SSH tunnel. |
+| `policy.sh` | `start`: run a trained policy (model on a cluster GPU, this Mac drives the arm through an SSH tunnel). `stop` or Ctrl-C: the arm glides back to where it started, motors off, server cancelled. |
+| `home.py` | Save the arm's pose before a run and glide back to it afterwards, without dropping the arm. |
 | `cluster/train_smolvla.sbatch` | Fine-tune SmolVLA on a dataset (H200). |
-| `cluster/serve_policy.sbatch` | Serve a trained policy on the H200, localhost-only, for `run_policy.sh`. |
+| `cluster/serve_policy.sbatch` | Serve a trained policy on the H200, localhost-only, for `policy.sh`. |
 | `test_policy_server.py` | Check a running server end to end with a recorded frame, without moving the arm. |
 
 `~/so101` is a symlink to this folder.
