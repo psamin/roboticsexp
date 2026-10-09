@@ -24,7 +24,7 @@ echo "Model: $MODEL"
 
 JOB=$(ssh -o BatchMode=yes $LOGIN "squeue -u pi34 -n smolvla-serve -t RUNNING -h -o %i | head -1" 2>/dev/null)
 if [ -z "$JOB" ]; then
-  echo "No policy server running. Start one on the cluster (1x L40S, 2 h), then rerun this:" >&2
+  echo "No policy server running. Start one on the cluster (1x H200, 2 h), then rerun this:" >&2
   echo "  ssh $LOGIN 'MODEL=$MODEL sbatch ~/serve_policy.sbatch'" >&2
   exit 1
 fi

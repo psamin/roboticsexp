@@ -7,7 +7,8 @@
 #   MODEL=/nethome-instruction/pi34/models/<dir> sbatch serve_policy.sbatch
 #SBATCH -J smolvla-serve
 #SBATCH -p general
-#SBATCH --gres=gpu:l40s:1
+#SBATCH --gres=gpu:h200:1   # the tunnel needs SSH into the job's node; on the L40S node (zapp) SSH
+#                              login fails because /nethome is a broken symlink there (no authorized_keys)
 #SBATCH -c 8
 #SBATCH --mem=48G
 #SBATCH -t 2:00:00

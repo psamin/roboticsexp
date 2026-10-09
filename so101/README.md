@@ -9,7 +9,7 @@ scripts run against is `~/Documents/GitHub/lerobot` (commit `e624f3f7`), environ
 | Kind | Name | Notes |
 |---|---|---|
 | Dataset | [flyingturtleboop/so101_medicine_bottle_pickplace](https://huggingface.co/datasets/flyingturtleboop/so101_medicine_bottle_pickplace) ([viewer](https://huggingface.co/spaces/lerobot/visualize_dataset?path=%2Fflyingturtleboop%2Fso101_medicine_bottle_pickplace%2Fepisode_0)) | 15 episodes, 7,824 frames, 30 fps, cameras `front` (C920, top) + `wrist`. Collected with demo-then-replay. Episodes 11 and 14 have a bad start (hand in frame / bottle already on plate) and are excluded from training. |
-| Model | SmolVLA fine-tune, job 9604 | `lerobot/smolvla_base`, 10k steps, batch 64, H200, episodes 11/14 excluded. On the cluster at `~/models/smolvla-so101_medicine_bottle_pickplace-9604/`. |
+| Model | SmolVLA fine-tune, job 9604 | `lerobot/smolvla_base`, 10k steps, batch 64, H200, episodes 11/14 excluded, final loss 0.024. On the cluster at `~/models/smolvla-so101_medicine_bottle_pickplace-9604/` (866 MB). Server check (`test_policy_server.py`): predicted first action within 0.64° mean / 1.5° max of the recording. Not yet run on the arm. |
 
 ## Files
 
@@ -23,7 +23,8 @@ scripts run against is `~/Documents/GitHub/lerobot` (commit `e624f3f7`), environ
 | `keys.py`, `VOICE.md` | Arrow-key controls and the macOS Voice Control phrases that press them. |
 | `run_policy.sh` | Run a trained policy: model on a cluster GPU, this Mac drives the arm through an SSH tunnel. |
 | `cluster/train_smolvla.sbatch` | Fine-tune SmolVLA on a dataset (H200). |
-| `cluster/serve_policy.sbatch` | Serve a trained policy on a GPU, localhost-only, for `run_policy.sh`. |
+| `cluster/serve_policy.sbatch` | Serve a trained policy on the H200, localhost-only, for `run_policy.sh`. |
+| `test_policy_server.py` | Check a running server end to end with a recorded frame, without moving the arm. |
 
 `~/so101` is a symlink to this folder.
 
@@ -49,4 +50,5 @@ DATASET=flyingturtleboop/<dataset> STEPS=10000 EXCLUDE="[11,14]" sbatch ~/train_
 | Washed-out top camera after locking exposure | C920 manual exposure doesn't hold once a stream opens on macOS | Lock focus + white balance only |
 | Wrist camera dark | Its auto mode uses a hidden gain; manual mode can't reach it, and only a USB replug restores auto | Leave wrist exposure on auto |
 | Voice "record take" discarded the demo | Voice Control dictated the words; the typed `r` was LeRobot's redo shortcut | Arrow keys only, letters ignored; distinct "robot …" phrases |
+| Tunnel to the policy server fails on the L40S node | `/nethome` is a broken symlink on some compute nodes, so sshd can't read `authorized_keys` | Serve on the H200 node (`angleyne`), where SSH works |
 | Trained policy would get the wrong camera names | `policy_server` overrides the saved rename map with the client's empty one | Policy runs name cameras `camera1`/`camera2`, as in training |
