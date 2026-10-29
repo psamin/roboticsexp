@@ -9,24 +9,25 @@ from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdShade, Vt
 H_APERTURE = 20.955
 CAMERAS = {
     # setup shot: drone near the floor, target sphere at 1 m
-    "setup": {"eye": (1.55, -1.25, 0.95), "target": (0.0, 0.0, 0.55), "focal": 30.0},
+    "setup": {"eye": (1.7, -1.35, 0.66), "target": (0.0, 0.02, 0.63), "focal": 22.0},
     # playback / trained shot: around the hover point
-    "hover": {"eye": (1.35, -1.1, 1.2), "target": (0.05, 0.0, 0.9), "focal": 30.0},
+    "hover": {"eye": (1.2, -0.62, 1.32), "target": (0.22, 0.14, 1.08), "focal": 35.0},
     "wide": {"eye": (3.2, -2.6, 1.9), "target": (0.0, 0.0, 0.8), "focal": 24.0},
 }
 
 
 def dress_scene(origin, floor_grey: float = 0.62):
-    import isaaclab.sim as sim_utils
     import omni.usd
-    from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 
     stage = omni.usd.get_context().get_stage()
     mat = UsdShade.Material.Define(stage, "/World/Looks/Floor")
     sh = UsdShade.Shader.Define(stage, "/World/Looks/Floor/PBR")
     sh.CreateIdAttr("UsdPreviewSurface")
     sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(floor_grey, floor_grey, floor_grey))
-    sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.85)
+    sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.9)
+    # matte: no Fresnel reflection, which otherwise darkens the far floor at grazing angles
+    sh.CreateInput("useSpecularWorkflow", Sdf.ValueTypeNames.Int).Set(1)
+    sh.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.0, 0.0, 0.0))
     mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
     floor = UsdGeom.Mesh.Define(stage, "/World/Floor")
     s, (ox, oy, oz) = 200.0, origin
@@ -46,12 +47,26 @@ def dress_scene(origin, floor_grey: float = 0.62):
     key.CreateAngleAttr(2.0)
     UsdGeom.Xformable(key).AddRotateXYZOp().Set(Gf.Vec3f(40.0, 0.0, 140.0))
 
-    marker = VisualizationMarkers(VisualizationMarkersCfg(
-        prim_path="/Visuals/Target",
-        markers={"target": sim_utils.SphereCfg(
-            radius=0.025, visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.75, 0.25),
-                                                                      roughness=0.35))}))
-    return marker
+    return TargetSphere(stage)
+
+
+class TargetSphere:
+    """One green sphere at environment 0's target. A plain prim (no instancer, no collider): visual only."""
+
+    def __init__(self, stage, radius: float = 0.025):
+        sphere = UsdGeom.Sphere.Define(stage, "/World/Target")
+        sphere.CreateRadiusAttr(radius)
+        mat = UsdShade.Material.Define(stage, "/World/Looks/Target")
+        sh = UsdShade.Shader.Define(stage, "/World/Looks/Target/PBR")
+        sh.CreateIdAttr("UsdPreviewSurface")
+        sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.08, 0.72, 0.22))
+        sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.35)
+        mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
+        UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(mat)
+        self.op = UsdGeom.Xformable(sphere).AddTranslateOp()
+
+    def visualize(self, translations):
+        self.op.Set(Gf.Vec3d(*[float(x) for x in translations[0]]))
 
 
 def make_renderable(stage, path: str) -> int:

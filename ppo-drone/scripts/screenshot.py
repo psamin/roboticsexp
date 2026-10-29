@@ -44,8 +44,8 @@ def main():
     dev = env.device
     if agent is None:   # setup shot: drone just above the floor, target at the 1 m hover point (slightly offset)
         cond = {"stage": torch.zeros(1, dtype=torch.long, device=dev),
-                "start": torch.tensor([[-0.15, -0.05, 0.22]], device=dev),
-                "target": torch.tensor([[0.15, 0.12, 1.0]], device=dev),
+                "start": torch.tensor([[-0.12, -0.06, 0.30]], device=dev),
+                "target": torch.tensor([[0.12, 0.10, 1.0]], device=dev),
                 "rpy": torch.zeros(1, 3, device=dev), "start_vel": torch.zeros(1, 3, device=dev),
                 "wind_frac": torch.zeros(1, 3, device=dev)}
         policy, steps = (lambda o: torch.zeros(1, 4, device=dev)), 3      # hover thrust, a few frames
