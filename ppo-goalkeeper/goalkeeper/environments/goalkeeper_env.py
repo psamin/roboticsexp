@@ -38,6 +38,7 @@ class GoalkeeperEnvCfg(DirectRLEnvCfg):
 
     asset_paths: dict = {}          # from environments.assets.build_all()
     render_scene: bool = False      # turf, field lines, sky, goal mesh (rendering only; physics is identical)
+    sky: str = "puresky"            # "puresky", "studio" or "photo" (see scene_visuals.build_field)
 
     # drive (DriveConfig) and rewards (RewardConfig)
     vmax: float = 2.0
@@ -58,6 +59,7 @@ class GoalkeeperEnvCfg(DirectRLEnvCfg):
     kick_delay_s: float = 0.0       # ball rests on the mark this long before the kick (playback/screenshots)
     hold_after_outcome_s: float = 0.0   # keep simulating after the result (playback), no reward
     contact_force_threshold: float = 0.5
+    tyre_friction: tuple = (0.9, 0.85)     # static, dynamic: rubber on dry turf
 
 
 class GoalkeeperEnv(DirectRLEnv):
@@ -107,6 +109,8 @@ class GoalkeeperEnv(DirectRLEnv):
         stage = omni.usd.get_context().get_stage()
         self.robot = Articulation(K.keeper_cfg())
         K.add_panel(stage, "/World/envs/env_0/Keeper")
+        before = K.set_tyre_friction(stage, "/World/envs/env_0/Keeper", self.cfg.tyre_friction[0], self.cfg.tyre_friction[1])
+        print(f"[env] tyre friction set to {self.cfg.tyre_friction} (asset values were {before})", flush=True)
         if self.cfg.render_scene:
             K.make_visuals_renderable(stage, "/World/envs/env_0/Keeper")
         ball_cfg = RigidObjectCfg(
@@ -120,13 +124,13 @@ class GoalkeeperEnv(DirectRLEnv):
         if self.cfg.render_scene:
             vis = sim_utils.UsdFileCfg(usd_path=self.cfg.asset_paths["goal_visual"])
             vis.func("/World/envs/env_0/GoalVisual", vis)
-        ground = sim_utils.CuboidCfg(
-            size=(4000.0, 4000.0, 0.2), visible=False,
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(static_friction=0.9, dynamic_friction=0.8, restitution=0.05,
-                                                            restitution_combine_mode="min"),
+        # infinite plane collider (wheel cylinders lose contact against a huge box collider); turf friction
+        ground = sim_utils.GroundPlaneCfg(
+            visible=False,
+            physics_material=sim_utils.RigidBodyMaterialCfg(static_friction=0.9, dynamic_friction=0.85,
+                                                            restitution=0.05, restitution_combine_mode="min"),
         )
-        ground.func("/World/ground", ground, translation=(0.0, 0.0, -0.1))
+        ground.func("/World/ground", ground)
         self.contact = ContactSensor(ContactSensorCfg(
             prim_path="/World/envs/env_.*/Ball",
             filter_prim_paths_expr=["/World/envs/env_.*/Keeper/goal_panel", "/World/envs/env_.*/Keeper/base_link"],
@@ -138,7 +142,7 @@ class GoalkeeperEnv(DirectRLEnv):
         self.scene.sensors["contact"] = self.contact
         if self.cfg.render_scene:
             from .scene_visuals import build_field
-            build_field(stage, self.cfg.asset_paths, self.scene.env_origins[0].tolist())
+            build_field(stage, self.cfg.asset_paths, self.scene.env_origins[0].tolist(), self.cfg.sky)
         else:
             light = sim_utils.DomeLightCfg(intensity=1500.0, color=(0.9, 0.9, 0.9))
             light.func("/World/Light", light)

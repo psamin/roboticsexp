@@ -21,7 +21,7 @@ TRACK_WIDTH = 0.37             # wheel centre-to-centre across the robot (m)
 SPAWN_Z = 0.064                # base_link height when standing on its wheels (measured: 0.0635 m)
 YAW_90 = (math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4))   # (w, x, y, z): forward axis along world +y
 
-PANEL_SIZE = (0.70, 0.012, 0.40)   # along robot x (= world y), thickness, height
+PANEL_SIZE = (0.70, 0.012, 0.34)   # along robot x (= world y), thickness, height
 PANEL_BOTTOM = 0.035               # gap under the panel, well below the ball radius
 PANEL_MASS = 1.6
 
@@ -51,6 +51,22 @@ def make_visuals_renderable(stage, keeper_path: str):
             p.SetInstanceable(False)
             n += 1
     return n
+
+
+def set_tyre_friction(stage, keeper_path: str, static: float, dynamic: float):
+    """Rubber-on-turf friction for the wheel material shipped with the Jackal asset. Returns the original values."""
+    from pxr import Usd
+    before = {}
+    for p in Usd.PrimRange(stage.GetPrimAtPath(keeper_path)):
+        if p.HasAPI(UsdPhysics.MaterialAPI):
+            m = UsdPhysics.MaterialAPI(p)
+            px = PhysxSchema.PhysxMaterialAPI(p) if p.HasAPI(PhysxSchema.PhysxMaterialAPI) else None
+            before[str(p.GetPath())] = (m.GetStaticFrictionAttr().Get(), m.GetDynamicFrictionAttr().Get(),
+                                        px.GetFrictionCombineModeAttr().Get() if px else None)
+            m.CreateStaticFrictionAttr().Set(static)
+            m.CreateDynamicFrictionAttr().Set(dynamic)
+            PhysxSchema.PhysxMaterialAPI.Apply(p).CreateFrictionCombineModeAttr().Set("average")
+    return before
 
 
 def _material(stage, path, color, roughness, metallic=0.0):
@@ -100,10 +116,14 @@ def add_panel(stage, keeper_path: str, base_body: str = "base_link"):
     m.CreateMassAttr(PANEL_MASS)
     m.CreateCenterOfMassAttr(Gf.Vec3f(0, 0, 0))
 
-    sheet = _material(stage, f"{keeper_path}/goal_panel/Looks/Sheet", (0.045, 0.047, 0.05), 0.55)
+    sheet_path = f"{keeper_path}/goal_panel/Looks/Polycarbonate"
+    glass = sim_utils.GlassMdlCfg(glass_color=(0.86, 0.9, 0.94), frosting_roughness=0.03, thin_walled=True,
+                                  glass_ior=1.58)
+    glass.func(sheet_path, glass)
     alu = _material(stage, f"{keeper_path}/goal_panel/Looks/Aluminium", (0.62, 0.63, 0.65), 0.35, 0.9)
     w = PANEL_SIZE[0]
-    _box(stage, f"{keeper_path}/goal_panel/Sheet", (0, 0, 0), (w, t, h), sheet)
+    _box(stage, f"{keeper_path}/goal_panel/Sheet", (0, 0, 0), (w, t, h))
+    sim_utils.bind_visual_material(f"{keeper_path}/goal_panel/Sheet", sheet_path)
     rail = 0.022
     for s in (-1, 1):   # aluminium extrusion frame around the sheet
         _box(stage, f"{keeper_path}/goal_panel/Upright{'L' if s > 0 else 'R'}", (s * (w / 2 + rail / 2), 0, 0),

@@ -16,6 +16,7 @@ class DriveConfig:
     vmax: float = 2.0             # m/s (the Jackal's rated top speed)
     amax: float = 6.0             # m/s^2
     y_limit: float = F.KEEPER_Y_LIMIT
+    brake_margin: float = 0.75    # plan stops at 75% of amax: the real wheels lag the reference while braking
 
 
 def step_reference(action: torch.Tensor, y: torch.Tensor, v_ref: torch.Tensor, dt: float, cfg: DriveConfig):
@@ -23,7 +24,8 @@ def step_reference(action: torch.Tensor, y: torch.Tensor, v_ref: torch.Tensor, d
     v_cmd = action.clamp(-1.0, 1.0) * cfg.vmax
     room_pos = (cfg.y_limit - y).clamp(min=0.0)
     room_neg = (cfg.y_limit + y).clamp(min=0.0)
-    v_cmd = torch.minimum(v_cmd, torch.sqrt(2 * cfg.amax * room_pos))
-    v_cmd = torch.maximum(v_cmd, -torch.sqrt(2 * cfg.amax * room_neg))
+    a_brake = cfg.brake_margin * cfg.amax
+    v_cmd = torch.minimum(v_cmd, torch.sqrt(2 * a_brake * room_pos))
+    v_cmd = torch.maximum(v_cmd, -torch.sqrt(2 * a_brake * room_neg))
     dv = (v_cmd - v_ref).clamp(-cfg.amax * dt, cfg.amax * dt)
     return v_ref + dv
