@@ -20,7 +20,7 @@ Save rate counts on-target shots only.
 | random actions | 64.8% | 54.2% | 38.0% |
 
 On advanced shots, 95% are physically reachable from the keeper's start; the analytical keeper saves all of those.
-PPO matches it. Untrained, the policy saved 89% / 48% / 44% (its first held-out evaluation). Rendered playback of 10
+PPO matches it. Untrained, the policy saved 88.9% / 52.1% / 40.9% (its first held-out evaluation; a keeper that barely moves still blocks central shots). Rendered playback of 10
 advanced shots: PPO 10/10, analytical 10/10, random 4/10 ([play_summary_advanced.json](outputs/logs/play_summary_advanced.json)).
 
 Plots: [save_rate.png](outputs/plots/save_rate.png), [eval_save_rates.png](outputs/plots/eval_save_rates.png),
