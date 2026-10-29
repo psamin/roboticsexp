@@ -45,15 +45,15 @@ def main():
     dev = env.device
     if agent is None:   # setup shot: drone just above the floor, target at the 1 m hover point (slightly offset)
         cond = {"stage": torch.zeros(1, dtype=torch.long, device=dev),
-                "start": torch.tensor([[-0.12, -0.06, 0.30]], device=dev),
+                "start": torch.tensor([[-0.12, -0.06, 0.16]], device=dev),
                 "target": torch.tensor([[0.12, 0.10, 1.0]], device=dev),
                 "rpy": torch.zeros(1, 3, device=dev), "start_vel": torch.zeros(1, 3, device=dev),
                 "wind_frac": torch.zeros(1, 3, device=dev)}
         policy, steps = (lambda o: torch.zeros(1, 4, device=dev)), 3      # hover thrust, a few frames
     else:               # trained shot: a randomised start, flown by the learned policy
         cond = {"stage": torch.ones(1, dtype=torch.long, device=dev),
-                "start": torch.tensor([[-0.12, -0.1, 0.9]], device=dev),
-                "target": torch.tensor([[0.25, 0.18, 1.1]], device=dev),
+                "start": torch.tensor([[-0.15, -0.12, 0.8]], device=dev),
+                "target": torch.tensor([[0.2, 0.12, 0.5]], device=dev),
                 "rpy": torch.tensor([[0.12, -0.1, 0.6]], device=dev), "start_vel": torch.zeros(1, 3, device=dev),
                 "wind_frac": torch.zeros(1, 3, device=dev)}
         policy, steps = agent.act_deterministic, int(args.fly_s / env.step_dt)
@@ -70,10 +70,15 @@ def main():
     if cam_name == "closeup":
         o = torch.tensor(origin, device=dev)
         p_d = env.robot.data.root_pos_w[0] - o
-        look = p_d if agent is None else 0.5 * (p_d + env.target_w[0] - o)
-        look = look.tolist()
-        cam = {"eye": (look[0] + 0.27, look[1] - 0.21, look[2] + 0.12), "target": (look[0], look[1], look[2] - 0.005),
-               "focal": 30.0}
+        # frame the drone and its shadow on the floor (the shadow shows it is airborne)
+        if agent is None:
+            look = (p_d * torch.tensor([1.0, 1.0, 0.0], device=dev) + torch.tensor([0, 0, 0.42], device=dev) * p_d[2])
+            look = look.tolist()
+            cam = {"eye": (look[0] + 0.42, look[1] - 0.33, look[2] + 0.10), "target": tuple(look), "focal": 26.0}
+        else:
+            mid = 0.5 * (p_d + env.target_w[0] - o)
+            look = (mid * torch.tensor([1.0, 1.0, 0.5], device=dev)).tolist()
+            cam = {"eye": (look[0] + 0.9, look[1] - 0.7, look[2] + 0.15), "target": tuple(look), "focal": 22.0}
     else:
         cam = S.CAMERAS[cam_name]
     stage = omni.usd.get_context().get_stage()

@@ -16,7 +16,7 @@ CAMERAS = {
 }
 
 
-def dress_scene(origin, floor_grey: float = 0.62):
+def dress_scene(origin, floor_grey: float = 0.8):
     import omni.usd
 
     stage = omni.usd.get_context().get_stage()
@@ -40,15 +40,15 @@ def dress_scene(origin, floor_grey: float = 0.62):
     floor.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
     UsdShade.MaterialBindingAPI.Apply(floor.GetPrim()).Bind(mat)
 
-    dome = UsdLux.DomeLight.Define(stage, "/World/Sky")          # neutral grey background + soft fill
-    dome.CreateIntensityAttr(700.0)
-    dome.CreateColorAttr(Gf.Vec3f(0.85, 0.86, 0.88))
-    key = UsdLux.DistantLight.Define(stage, "/World/Key")
-    key.CreateIntensityAttr(2200.0)
-    key.CreateAngleAttr(2.0)
-    UsdGeom.Xformable(key).AddRotateXYZOp().Set(Gf.Vec3f(40.0, 0.0, 140.0))
+    dome = UsdLux.DomeLight.Define(stage, "/World/Sky")          # mid-grey backdrop, darker than the lit floor
+    dome.CreateIntensityAttr(650.0)
+    dome.CreateColorAttr(Gf.Vec3f(0.6, 0.61, 0.64))
+    key = UsdLux.DistantLight.Define(stage, "/World/Key")         # near-overhead: a crisp shadow under the drone
+    key.CreateIntensityAttr(2800.0)
+    key.CreateAngleAttr(1.0)
+    UsdGeom.Xformable(key).AddRotateXYZOp().Set(Gf.Vec3f(15.0, 0.0, 140.0))
     fill = UsdLux.DistantLight.Define(stage, "/World/Fill")     # soft fill from the camera side (+x, -y, above)
-    fill.CreateIntensityAttr(1100.0)
+    fill.CreateIntensityAttr(900.0)
     fill.CreateAngleAttr(8.0)
     UsdGeom.Xformable(fill).AddRotateXYZOp().Set(Gf.Vec3f(52.5, 0.0, 39.8))
 

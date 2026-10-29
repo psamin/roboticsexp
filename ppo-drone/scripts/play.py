@@ -98,7 +98,7 @@ def main():
             pos = env.robot.data.root_pos_w[0].cpu().numpy()
             tgt = env.target_w[0].cpu().numpy()
             look = 0.9 * look + 0.1 * (0.5 * pos + 0.5 * tgt)          # smoothed follow camera
-            eye = look + np.array([0.5, -0.4, 0.16])
+            eye = look + np.array([0.55, -0.45, 0.05])     # just above the drone: backdrop and floor horizon behind it
             view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*eye), Gf.Vec3d(*look), Gf.Vec3d(0, 0, 1))
             follow_xf.Set(view.GetInverse())
             env.sim.render()
