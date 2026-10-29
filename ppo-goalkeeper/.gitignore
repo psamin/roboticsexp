@@ -6,3 +6,6 @@ outputs/checkpoints/*_iter*.pt
 asset_cache/
 outputs/run-*/
 outputs/videos/*.mp4
+
+# the repo root ignores *.png; keep the images the READMEs show
+!outputs/**/*.png

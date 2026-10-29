@@ -25,7 +25,7 @@ p.add_argument("--hold_s", type=float, default=0.4)
 p.add_argument("--max_s", type=float, default=4.0)
 p.add_argument("--render_passes", type=int, default=3, help="renders per video frame; >1 removes motion ghosting")
 p.add_argument("--trail", action="store_true", help="draw the flown path")
-p.add_argument("--no_outline", action="store_true", help="skip the orange outline around the drone")
+p.add_argument("--outline", action="store_true", help="draw an orange outline around the drone")
 args, app = config.launch(p, cameras=True)
 
 # env-frame waypoints (m): a loop at varying heights, hops of 0.6-0.9 m (inside the trained target offsets)
@@ -88,7 +88,7 @@ def main():
     W, H = args.width, args.height
     S.define_camera(stage, "/World/CamTour", (2, -2, 3), (0, 0, 1), 28.0, W, H, o.tolist())
     S.set_quality("rt", auto_exposure=(args.style == "studio"))
-    grab = S.Grabber({"tour": "/World/CamTour"}, W, H, segment=not args.no_outline)
+    grab = S.Grabber({"tour": "/World/CamTour"}, W, H, segment=args.outline)
     cam_xf = UsdGeom.Xformable(stage.GetPrimAtPath("/World/CamTour")).GetOrderedXformOps()[0]
 
     start = torch.tensor([ROUTE[0]], device=dev, dtype=torch.float32)
@@ -140,7 +140,7 @@ def main():
         for _ in range(args.render_passes):
             env.sim.render()
         img = grab.get("tour")
-        if img is not None and not args.no_outline:
+        if img is not None and args.outline:
             m = grab.mask("tour", "/World/envs/env_0/Robot")
             if k == 4:
                 print(f"[tour] outline mask pixels: {0 if m is None else int(m.sum())}", flush=True)
@@ -163,7 +163,7 @@ def main():
         obs, *_ = env.step(agent.act_deterministic(obs["policy"]))
         env.sim.render()
         img = grab.get("tour")
-        if img is not None and not args.no_outline:
+        if img is not None and args.outline:
             img = S.outline(img, grab.mask("tour", "/World/envs/env_0/Robot"))
         if img is not None:
             clean.append_data(img)

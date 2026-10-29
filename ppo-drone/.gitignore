@@ -4,3 +4,6 @@ __pycache__/
 outputs/logs/**/events.out.tfevents.*
 outputs/checkpoints/*_iter*.pt
 outputs/run-*/
+
+# the repo root ignores *.png; keep the images the READMEs show
+!outputs/**/*.png
