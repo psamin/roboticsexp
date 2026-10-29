@@ -123,6 +123,7 @@ def main():
         env.pop_completed()
         env.forced_shots = pick(1 % args.episodes)
         done_eps, saves, on_target, flash, flash_left, results = 0, 0, 0, None, 0, []
+        counted = False                          # current shot already added to the on-screen tally
         for _ in range(30):                      # let textures stream in before the first frame
             env.sim.render()
         while done_eps < args.episodes:
@@ -132,13 +133,19 @@ def main():
             if rec is not None:
                 oc = int(rec["outcome"][0]); tgt = bool(rec["on_target"][0])
                 results.append({"outcome": outcomes.OUTCOME_NAMES[oc], "on_target": tgt})
-                on_target += tgt
-                saves += tgt and oc == outcomes.SAVE
+                if not counted:
+                    on_target += tgt
+                    saves += tgt and oc == outcomes.SAVE
+                counted = False
                 done_eps += 1
                 env.forced_shots = pick((done_eps + 1) % args.episodes)
-            # flash the result while the ball is still in play after the decision
+            # tally and flash the result as soon as it is decided, while the ball is still in play
             live = int(env.outcome[0])
-            if live != outcomes.NONE and flash_left == 0 and flash is None:
+            if live != outcomes.NONE and not counted and rec is None:
+                tgt = bool(env.shot["on_target"][0])
+                on_target += tgt
+                saves += tgt and live == outcomes.SAVE
+                counted = True
                 flash, flash_left = {outcomes.SAVE: "SAVE", outcomes.GOAL: "GOAL", outcomes.MISS: "MISS",
                                      outcomes.TIMEOUT: "TIME"}[live], int(1.0 / env.step_dt)
             if grab is not None:

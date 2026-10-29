@@ -16,7 +16,8 @@ TILE = 1.6                 # turf texture repeat, m
 STRIPE = 2.5               # mowing stripe width, m
 
 
-def _textured_material(stage, path, grass_dir: Path, tint=(1, 1, 1), bias=(0, 0, 0), roughness_scale=1.0):
+def _textured_material(stage, path, grass_dir: Path, tint=(1, 1, 1), bias=(0, 0, 0), roughness_scale=1.0,
+                       normal_strength=1.0):
     mat = UsdShade.Material.Define(stage, path)
     pbr = UsdShade.Shader.Define(stage, f"{path}/PBR")
     pbr.CreateIdAttr("UsdPreviewSurface")
@@ -37,7 +38,8 @@ def _textured_material(stage, path, grass_dir: Path, tint=(1, 1, 1), bias=(0, 0,
         return t
 
     col = tex("Color", "Grass005_2K-JPG_Color.jpg", "sRGB", (*tint, 1), (*bias, 0))
-    nrm = tex("Normal", "Grass005_2K-JPG_NormalGL.jpg", "raw", (2, 2, 2, 1), (-1, -1, -1, 0))
+    k = normal_strength          # scales the tangent-space x/y of the normal map (0 = flat)
+    nrm = tex("Normal", "Grass005_2K-JPG_NormalGL.jpg", "raw", (2 * k, 2 * k, 2, 1), (-k, -k, -1, 0))
     rgh = tex("Rough", "Grass005_2K-JPG_Roughness.jpg", "raw", (roughness_scale,) * 4, (0, 0, 0, 0))
     pbr.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(col.ConnectableAPI(), "rgb")
     pbr.CreateInput("normal", Sdf.ValueTypeNames.Normal3f).ConnectToSource(nrm.ConnectableAPI(), "rgb")
@@ -123,8 +125,9 @@ def build_field(stage, asset_paths: dict, origin=(0.0, 0.0, 0.0), sky: str = "pu
     grass = Path(asset_paths["grass_dir"])
     root = "/World/Field"
     UsdGeom.Xform.Define(stage, root)
-    light = _textured_material(stage, f"{root}/Looks/TurfLight", grass, tint=(0.95, 1.0, 0.9))
-    dark = _textured_material(stage, f"{root}/Looks/TurfDark", grass, tint=(0.72, 0.82, 0.68))
+    # a full-strength normal map turns distant turf near-black at grazing angles; half strength keeps the blades
+    light = _textured_material(stage, f"{root}/Looks/TurfLight", grass, tint=(0.95, 1.0, 0.9), normal_strength=0.5)
+    dark = _textured_material(stage, f"{root}/Looks/TurfDark", grass, tint=(0.72, 0.82, 0.68), normal_strength=0.5)
     paint = _textured_material(stage, f"{root}/Looks/LinePaint", grass, tint=(0.25, 0.25, 0.25),
                                bias=(0.68, 0.68, 0.66), roughness_scale=1.0)
     x0, x1, y0, y1 = -14.0, 46.0, -24.0, 24.0
@@ -132,11 +135,21 @@ def build_field(stage, asset_paths: dict, origin=(0.0, 0.0, 0.0), sky: str = "pu
     for i in range(len(xs) - 1):
         v, f = _rect(xs[i], xs[i + 1], y0, y1)
         _mesh(stage, f"{root}/Stripe_{i:02d}", v, f, origin, light if i % 2 else dark)
-    big = 3000.0
-    for name, (a, b, c, d) in {"ApronN": (x0, x1, y1, big), "ApronS": (x0, x1, -big, y0),
-                               "ApronE": (x1, big, -big, big), "ApronW": (-big, x0, -big, big)}.items():
-        v, f = _rect(a, b, c, d)
-        _mesh(stage, f"{root}/{name}", v, f, origin, dark)
+    # rings of turf around the pitch that fade toward a pale haze, a stand-in for aerial perspective
+    haze = (0.40, 0.45, 0.40)
+    inner = (x0, x1, y0, y1)
+    for i, (w, half) in enumerate(((0.0, 80.0), (0.3, 250.0), (0.6, 800.0), (0.85, 3000.0))):
+        mat = _textured_material(stage, f"{root}/Looks/Haze{i}", grass,
+                                 tint=tuple((1 - w) * c for c in (0.8, 0.9, 0.76)), bias=tuple(w * h for h in haze),
+                                 normal_strength=0.5 * (1 - w))
+        outer = (min(x0, -half), max(x1, half), -half, half)
+        ox0, ox1, oy0, oy1 = outer
+        ix0, ix1, iy0, iy1 = inner
+        for j, (a, b, c, d) in enumerate(((ox0, ox1, iy1, oy1), (ox0, ox1, oy0, iy0),
+                                          (ix1, ox1, iy0, iy1), (ox0, ix0, iy0, iy1))):
+            v, f = _rect(a, b, c, d)
+            _mesh(stage, f"{root}/Apron{i}_{j}", v, f, origin, mat)
+        inner = outer
     (qv, qf), (tv, tf) = field_markings()
     _mesh(stage, f"{root}/Lines", qv, qf, origin, paint, z=0.003)
     _mesh(stage, f"{root}/Marks", tv, tf, origin, paint, z=0.003)
