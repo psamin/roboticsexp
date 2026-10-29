@@ -24,8 +24,9 @@ def dress_scene(origin, floor_grey: float = 0.62):
     sh = UsdShade.Shader.Define(stage, "/World/Looks/Floor/PBR")
     sh.CreateIdAttr("UsdPreviewSurface")
     sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(floor_grey, floor_grey, floor_grey))
-    sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.9)
-    # matte: no Fresnel reflection, which otherwise darkens the far floor at grazing angles
+    # roughness 0 with no specular: RTX's rough-diffuse model darkens the far floor at grazing angles (measured:
+    # roughness 0.9 -> far floor at 39 of 255 vs background 101; roughness 0 -> 102, a seamless horizon)
+    sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.0)
     sh.CreateInput("useSpecularWorkflow", Sdf.ValueTypeNames.Int).Set(1)
     sh.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.0, 0.0, 0.0))
     mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")

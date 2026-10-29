@@ -16,7 +16,7 @@ from drone_ppo import config
 p = argparse.ArgumentParser()
 p.add_argument("--out", default="outputs/screenshots/drone_ppo_setup.png")
 p.add_argument("--checkpoint", default=None)
-p.add_argument("--camera", default=None)
+p.add_argument("--camera", default="closeup", help="closeup (frames the drone), or a preset in scene.CAMERAS")
 p.add_argument("--width", type=int, default=2560)
 p.add_argument("--height", type=int, default=1440)
 p.add_argument("--mode", choices=("pt", "rt"), default="pt")
@@ -59,11 +59,23 @@ def main():
         policy, steps = agent.act_deterministic, int(args.fly_s / env.step_dt)
     env.forced = cond
     obs, _ = env.reset()
-    for _ in range(steps):
+    for k in range(steps):
         obs, *_ = env.step(policy(obs["policy"]))
+        # trained close-up: stop while the drone is closing in, so drone and target sphere are both visible
+        if agent is not None and args.camera == "closeup" and k * env.step_dt > 0.4 and \
+                float((env.robot.data.root_pos_w[0] - env.target_w[0]).norm()) < 0.12:
+            break
     origin = env.scene.env_origins[0].tolist()
-    cam_name = args.camera or ("setup" if agent is None else "hover")
-    cam = S.CAMERAS[cam_name]
+    cam_name = args.camera
+    if cam_name == "closeup":
+        o = torch.tensor(origin, device=dev)
+        p_d = env.robot.data.root_pos_w[0] - o
+        look = p_d if agent is None else 0.5 * (p_d + env.target_w[0] - o)
+        look = look.tolist()
+        cam = {"eye": (look[0] + 0.27, look[1] - 0.21, look[2] + 0.12), "target": (look[0], look[1], look[2] - 0.005),
+               "focal": 30.0}
+    else:
+        cam = S.CAMERAS[cam_name]
     stage = omni.usd.get_context().get_stage()
     view = S.define_camera(stage, "/World/Cam", cam["eye"], cam["target"], cam["focal"], args.width, args.height, origin)
     S.set_quality(args.mode, spp_total=args.spp)
