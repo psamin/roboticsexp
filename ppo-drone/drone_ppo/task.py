@@ -27,21 +27,30 @@ def action_from_thrust(thrust: torch.Tensor, weight: float, twr: float = THRUST_
 
 
 # ----------------------------------------------------------------------------------------------- observation
-OBS_DIM, ACT_DIM = 16, 4
+ACT_DIM = 4
 OBS_NAMES = ("rel_x", "rel_y", "rel_z", "g_x", "g_y", "g_z", "vx", "vy", "vz", "wx", "wy", "wz",
              "a_thrust", "a_roll", "a_pitch", "a_yaw")
-OBS_SCALE = torch.tensor([1.0] * 3 + [1.0] * 3 + [2.0] * 3 + [10.0] * 3 + [1.0] * 4)
+STATE_SCALE = torch.tensor([1.0] * 3 + [1.0] * 3 + [2.0] * 3 + [10.0] * 3)
 OBS_CLIP = 5.0
 
 
-def build_obs(rel_pos_b, grav_b, lin_vel_b, ang_vel_b, prev_actions):
-    raw = torch.cat([rel_pos_b, grav_b, lin_vel_b, ang_vel_b, prev_actions], dim=-1)
-    return (raw / OBS_SCALE.to(raw.device)).clamp(-OBS_CLIP, OBS_CLIP)
+def obs_dim(action_history: int = 1) -> int:
+    """12 state numbers plus the last `action_history` actions (most recent first)."""
+    return 12 + ACT_DIM * action_history
+
+
+OBS_DIM = obs_dim(1)
+
+
+def build_obs(rel_pos_b, grav_b, lin_vel_b, ang_vel_b, action_history):
+    """action_history: (N, 4 * H), most recent action first."""
+    state = torch.cat([rel_pos_b, grav_b, lin_vel_b, ang_vel_b], dim=-1) / STATE_SCALE.to(rel_pos_b.device)
+    return torch.cat([state, action_history], dim=-1).clamp(-OBS_CLIP, OBS_CLIP)
 
 
 def unpack_obs(obs):
-    raw = obs * OBS_SCALE.to(obs.device)
-    return raw[:, 0:3], raw[:, 3:6], raw[:, 6:9], raw[:, 9:12], raw[:, 12:16]
+    raw = obs[:, :12] * STATE_SCALE.to(obs.device)
+    return raw[:, 0:3], raw[:, 3:6], raw[:, 6:9], raw[:, 9:12], obs[:, 12:16]
 
 
 # ----------------------------------------------------------------------------------------------- rewards
@@ -57,12 +66,18 @@ class RewardWeights:
     action_rate: float = 0.05    # |a - a_prev|^2
     success: float = 5.0         # one-time bonus for the first continuous hover of hold_s within radius
     crash: float = 5.0           # one-time penalty on crash / leaving the flight volume
+    # unstable-flight penalties (0 in the baseline)
+    ang_acc: float = 0.0         # |dw/dt / 100|^2: attitude wobble (angular acceleration, per 100 rad/s^2)
+    lin_acc: float = 0.0         # |dv/dt / 10|^2: translational jerkiness (acceleration, per 10 m/s^2)
 
 
 def reward_terms(w: RewardWeights, dist, lin_vel_b, ang_vel_b, grav_b, actions, prev_actions, success_now, failed,
-                 dt: float) -> dict:
+                 dt: float, ang_acc=None, lin_acc=None) -> dict:
     near = torch.exp(-(dist / 0.3) ** 2)
+    zero = torch.zeros_like(dist)
     return {
+        "ang_acc": -w.ang_acc * (ang_acc / 100.0).pow(2).sum(-1) * dt if ang_acc is not None else zero,
+        "lin_acc": -w.lin_acc * (lin_acc / 10.0).pow(2).sum(-1) * dt if lin_acc is not None else zero,
         "distance": w.distance * (1 - torch.tanh(dist / 0.8)) * dt,
         "precision": w.precision * (1 - torch.tanh(dist / 0.1)) * dt,
         "lin_vel": -w.lin_vel * (1 + w.near_target_gain * near) * lin_vel_b.pow(2).sum(-1) * dt,
@@ -73,6 +88,91 @@ def reward_terms(w: RewardWeights, dist, lin_vel_b, ang_vel_b, grav_b, actions, 
         "success": w.success * success_now.float(),
         "crash": -w.crash * failed.float(),
     }
+
+
+# ----------------------------------------------------------------------------------------------- L2F-style reward
+@dataclass
+class L2FWeights:
+    """Squared-cost reward from "Learning to Fly in Seconds" (Eschmann et al., RA-L 2024; arplaboratory/learning-to-fly):
+
+        r = constant - scale * (position |e|^2 + orientation (1 - q_w^2) + linear_velocity |v|^2
+                                + angular_velocity |w|^2 + action |a - a_hover|^2)
+
+    Initial weights are the paper code's `reward_squared_position_only_torque`; its curriculum multiplies position by
+    1.2 (cap 40), linear velocity by 1.4 (cap 1) and action by 1.4 (cap 1) at fixed intervals. Orientation here is the
+    tilt-only form (1 + g_z) / 2 = sin^2(tilt / 2), which equals 1 - q_w^2 at zero yaw (heading is irrelevant to
+    this task). Rewards are clipped at zero so ending an episode early is never better than flying badly.
+    """
+    position: float = 5.0
+    orientation: float = 5.0
+    linear_velocity: float = 0.01
+    angular_velocity: float = 0.0
+    action: float = 0.01
+    scale: float = 0.5
+    constant: float = 2.0
+    reward_scale: float = 0.1     # overall multiplier so returns stay in the same range as the shaped reward
+    non_negative: bool = True
+    crash: float = 5.0
+    success: float = 0.0          # optional hover bonus (0 = pure L2F)
+    ang_acc: float = 0.0          # optional unstable-flight penalties, as in RewardWeights
+    lin_acc: float = 0.0
+
+
+def l2f_reward_terms(w: L2FWeights, err, lin_vel_b, ang_vel_b, grav_b, actions, success_now, failed, dt: float,
+                     ang_acc=None, lin_acc=None) -> dict:
+    k = w.reward_scale
+    costs = {
+        "l2f_position": w.position * err.pow(2).sum(-1),
+        "l2f_orientation": w.orientation * 0.5 * (1 + grav_b[:, 2]),
+        "l2f_lin_vel": w.linear_velocity * lin_vel_b.pow(2).sum(-1),
+        "l2f_ang_vel": w.angular_velocity * ang_vel_b.pow(2).sum(-1),
+        "l2f_action": w.action * actions.pow(2).sum(-1),
+    }
+    terms = {"l2f_constant": torch.full_like(costs["l2f_position"], k * w.constant)}
+    terms.update({name: -k * w.scale * c for name, c in costs.items()})
+    total = sum(terms.values())
+    clipped = total.clamp(min=0.0) if w.non_negative else total
+    terms["l2f_clip"] = clipped - total
+    terms["ang_acc"] = -w.ang_acc * (ang_acc / 100.0).pow(2).sum(-1) * dt if ang_acc is not None else 0 * total
+    terms["lin_acc"] = -w.lin_acc * (lin_acc / 10.0).pow(2).sum(-1) * dt if lin_acc is not None else 0 * total
+    terms["success"] = w.success * success_now.float()
+    terms["crash"] = -w.crash * failed.float()
+    return terms
+
+
+class PenaltyCurriculum:
+    """Multiply chosen reward weights by fixed factors every `every` PPO iterations, up to caps (L2F-style).
+
+    gate: escalate only while the hover-success rate of recent training episodes is at least this value, so the
+    penalties tighten as fast as the policy keeps up (None = fixed schedule, as in the paper).
+    """
+
+    def __init__(self, weights, factors: dict, caps: dict, every: int, gate: float | None = None):
+        self.w, self.factors, self.caps, self.every, self.gate = weights, dict(factors), dict(caps), every, gate
+        self.steps = 0
+        self.history = []
+
+    def done(self):
+        return all(getattr(self.w, k) >= self.caps[k] for k in self.factors)
+
+    def step(self, iteration: int, success_rate: float) -> bool:
+        if self.every <= 0 or iteration % self.every or self.done():
+            return False
+        if self.gate is not None and not (success_rate >= self.gate):
+            return False
+        for k, f in self.factors.items():
+            setattr(self.w, k, min(getattr(self.w, k) * f, self.caps[k]))
+        self.steps += 1
+        self.history.append({"iteration": iteration, **{k: getattr(self.w, k) for k in self.factors}})
+        return True
+
+    def state_dict(self):
+        return {"steps": self.steps, "history": self.history, "weights": {k: getattr(self.w, k) for k in self.factors}}
+
+    def load_state_dict(self, sd):
+        self.steps, self.history = sd["steps"], list(sd["history"])
+        for k, v in sd["weights"].items():
+            setattr(self.w, k, v)
 
 
 # ----------------------------------------------------------------------------------------------- terminations
@@ -97,21 +197,25 @@ class Stage:
     yaw: float                 # initial yaw uniform [-y, y] rad
     start_vel: float           # initial linear velocity uniform [-v, v]^3
     wind: float                # constant horizontal disturbance force up to this fraction of the weight
+    start_ang_vel: float = 0.0  # initial body rates uniform [-w, w]^3 rad/s
 
 
 STAGES = (
     Stage("hover", 0.0, (1.0, 1.0), 0.10, 0.10, 0.2, 0.0, 0.0),
     Stage("reach", 0.5, (0.75, 1.25), 0.15, 0.15, 1.0, 0.1, 0.0),
     Stage("robust", 1.0, (0.5, 1.5), 0.30, 0.30, math.pi, 0.3, 0.05),
+    # evaluation only (never trained on): L2F-style recovery from large tilts and initial motion
+    Stage("recovery", 0.0, (1.0, 1.0), 0.20, math.pi / 4, math.pi, 1.0, 0.0, 1.0),
 )
 STAGE_NAMES = tuple(s.name for s in STAGES)
+N_TRAIN_STAGES = 3
 
 
 def sample_conditions(stages: torch.Tensor, generator=None) -> dict:
     """Initial state, target and disturbance for each entry of `stages` (long tensor), in the env frame."""
     dev, n = stages.device, stages.numel()
-    rows = torch.tensor([[s.target_xy, *s.target_z, s.start_offset, s.tilt, s.yaw, s.start_vel, s.wind]
-                         for s in STAGES], device=dev)[stages]
+    rows = torch.tensor([[s.target_xy, *s.target_z, s.start_offset, s.tilt, s.yaw, s.start_vel, s.wind,
+                          s.start_ang_vel] for s in STAGES], device=dev)[stages]
     u = lambda *shape: torch.rand(*shape, device=dev, generator=generator)
     sym = lambda half, k: (2 * u(n, k) - 1) * half.unsqueeze(-1)
     hover = torch.tensor(HOVER_POINT, device=dev)
@@ -123,7 +227,7 @@ def sample_conditions(stages: torch.Tensor, generator=None) -> dict:
     wind_mag = rows[:, 7] * u(n)
     wind = torch.stack([wind_mag * torch.cos(angle), wind_mag * torch.sin(angle), torch.zeros(n, device=dev)], -1)
     return {"stage": stages.clone(), "target": target, "start": start, "rpy": rpy,
-            "start_vel": sym(rows[:, 6], 3), "wind_frac": wind}
+            "start_vel": sym(rows[:, 6], 3), "wind_frac": wind, "start_ang_vel": sym(rows[:, 8], 3)}
 
 
 def quat_from_rpy(rpy: torch.Tensor) -> torch.Tensor:

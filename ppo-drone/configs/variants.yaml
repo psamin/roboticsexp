@@ -1,0 +1,62 @@
+# Reward-shaping and curriculum experiments. Each variant is merged over configs/train.yaml (nested dicts merge).
+# Run one with:  python scripts/train.py --variant <name> --budget_min 20 --out outputs/exp/<name>
+# All variants share the physics, the three task stages and the held-out tests, so differences come from the reward,
+# the reward curriculum, and the policy/critic inputs.
+
+baseline: {}
+
+# Penalties for unstable flight on top of the shaped reward: attitude wobble (angular acceleration), translational
+# jerkiness (linear acceleration), and stronger body-rate, action-rate and tilt terms.
+stability:
+  env:
+    rewards:
+      ang_vel: 0.05
+      action_rate: 0.2
+      upright: 2.0
+      ang_acc: 0.5
+      lin_acc: 0.5
+
+# "Learning to Fly in Seconds" (Eschmann, Albani, Loianno, RA-L 2024): squared-cost reward starting from the paper
+# code's lenient weights, tightened by its multiplicative penalty curriculum (position x1.2 up to 40, linear velocity
+# and action x1.4 up to 1). Here a step happens every 20 PPO iterations (~2M transitions), and only while recent
+# training episodes hover successfully at least 70% of the time.
+l2f:
+  env:
+    reward_mode: l2f
+    l2f: {position: 5.0, orientation: 5.0, linear_velocity: 0.01, angular_velocity: 0.0, action: 0.01}
+    penalty_curriculum:
+      every: 20
+      gate: 0.7
+      factors: {position: 1.2, linear_velocity: 1.4, action: 1.4}
+      caps: {position: 40.0, linear_velocity: 1.0, action: 1.0}
+
+# l2f plus the paper's other ingredients that fit this setup: a 32-step action history in the actor's observation,
+# an asymmetric critic (privileged disturbance, actuator, height and distance inputs), and per-episode random
+# force/torque disturbances during training (paper values: force std = weight / 20, torque std = weight / 10000).
+l2f_full:
+  env:
+    reward_mode: l2f
+    l2f: {position: 5.0, orientation: 5.0, linear_velocity: 0.01, angular_velocity: 0.0, action: 0.01}
+    penalty_curriculum:
+      every: 20
+      gate: 0.7
+      factors: {position: 1.2, linear_velocity: 1.4, action: 1.4}
+      caps: {position: 40.0, linear_velocity: 1.0, action: 1.0}
+    action_history: 32
+    asymmetric_critic: true
+    disturbance_force: 0.05
+    disturbance_torque: 2.6e-5
+
+# For later: first-order motor lag (the paper reports policies trained without it do not transfer to the real drone).
+l2f_motor_lag:
+  env:
+    reward_mode: l2f
+    l2f: {position: 5.0, orientation: 5.0, linear_velocity: 0.01, angular_velocity: 0.0, action: 0.01}
+    penalty_curriculum:
+      every: 20
+      gate: 0.7
+      factors: {position: 1.2, linear_velocity: 1.4, action: 1.4}
+      caps: {position: 40.0, linear_velocity: 1.0, action: 1.0}
+    action_history: 32
+    asymmetric_critic: true
+    motor_tau: 0.03

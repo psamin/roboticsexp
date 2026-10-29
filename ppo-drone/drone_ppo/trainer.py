@@ -22,7 +22,9 @@ class Trainer:
         self.selection_seed, self.config = selection_seed, config or {}
         self.ck_dir = os.path.join(out_dir, "checkpoints")
         os.makedirs(self.ck_dir, exist_ok=True)
-        self.buf = RolloutBuffer(self.T, self.N, T.OBS_DIM, T.ACT_DIM, env.device)
+        self.critic_split = agent.critic_dim != agent.obs_dim
+        self.buf = RolloutBuffer(self.T, self.N, agent.obs_dim, T.ACT_DIM, env.device,
+                                 agent.critic_dim if self.critic_split else None)
         self.it, self.steps, self.prior_wall, self.best = 0, 0, 0.0, -1e9
         self.eval_history = []
         if resume:
@@ -32,6 +34,8 @@ class Trainer:
             self.it, self.steps, self.prior_wall, self.best = ex["iteration"], ex["steps"], ex["wall_s"], ex["best"]
             self.eval_history = ex.get("eval_history", [])
             env.curriculum.load_state_dict(ex["curriculum"])
+            if ex.get("penalty_curriculum") and getattr(env, "penalty_curriculum", None):
+                env.penalty_curriculum.load_state_dict(ex["penalty_curriculum"])
             print(f"[train] resumed {resume} at iteration {self.it}", flush=True)
         from torch.utils.tensorboard import SummaryWriter
         self.tb = SummaryWriter(os.path.join(out_dir, "tb"))
@@ -42,9 +46,10 @@ class Trainer:
         return self.prior_wall + time.time() - self.t0
 
     def extra(self):
+        pc = getattr(self.env, "penalty_curriculum", None)
         return {"iteration": self.it, "steps": self.steps, "wall_s": self.wall(), "best": self.best,
                 "curriculum": self.env.curriculum.state_dict(), "eval_history": self.eval_history,
-                "config": self.config}
+                "config": self.config, "penalty_curriculum": pc.state_dict() if pc else None}
 
     def run_eval(self, tag):
         t0 = time.time()
@@ -81,12 +86,23 @@ class Trainer:
                         "final_dist_m": float(ep["final_dist"].mean())})
             for k in env.term_names:
                 row[f"rew_{k}"] = float(ep[f"r_{k}"].mean())
+            for k in ("tail_ang_speed", "tail_action_rate", "max_tilt_deg"):
+                if k in ep:
+                    v = ep[k][~torch.isnan(ep[k])] if ep[k].is_floating_point() else ep[k]
+                    row[k] = float(v.mean()) if v.numel() else float("nan")
+        pc = getattr(env, "penalty_curriculum", None)
+        if pc is not None:
+            if env.update_penalty_curriculum(self.it, row.get("success_rate", float("nan"))):
+                print(f"[curriculum] it {self.it}: reward weights now " + json.dumps(pc.history[-1]), flush=True)
+            for k in pc.factors:
+                row[f"w_{k}"] = getattr(pc.w, k)
         for k, v in row.items():
             if isinstance(v, (int, float)) and math.isfinite(v):
                 self.tb.add_scalar(f"train/{k}", v, self.steps)
         if self.csv_w is None:
             keys = list(row) + [k for k in ("episodes", "ep_return", "ep_length_s", "success_rate", "crash_rate",
-                                            "final_dist_m") if k not in row] + \
+                                            "final_dist_m", "tail_ang_speed", "tail_action_rate", "max_tilt_deg")
+                                if k not in row] + \
                 [f"rew_{k}" for k in env.term_names if f"rew_{k}" not in row]
             self.csv_w = csv.DictWriter(self.csv_f, fieldnames=keys, extrasaction="ignore")
             if self.csv_f.tell() == 0:
@@ -107,19 +123,22 @@ class Trainer:
         if not self.eval_history:
             self.run_eval("initial")                 # untrained policy, minute 0
         last_eval = last_ck = time.time()
-        obs = env.reset()[0]["policy"]
+        o = env.reset()[0]
+        obs, cobs = o["policy"], o.get("critic")
         env.pop_completed()
         print(f"[train] {self.N} envs x {self.T} steps = {self.N*self.T} samples per update; "
               f"budget {self.budget_s/60:.0f} min", flush=True)
         while True:
             t0 = time.time()
             for _ in range(self.T):
-                u, a, logp, v = agent.act(obs)
+                u, a, logp, v = agent.act(obs, cobs)
                 nxt, r, term, trunc, _ = env.step(a)
-                v_final = agent.value(env.final_obs) if bool(trunc.any()) else None
-                buf.add(obs, u, logp, r, term, trunc, v, gamma, v_final)
-                obs = nxt["policy"]
-            buf.compute_returns(agent.value(obs), gamma, agent.cfg.lam)
+                v_final = None
+                if bool(trunc.any()):
+                    v_final = agent.value(env.final_critic_obs if self.critic_split else env.final_obs)
+                buf.add(obs, u, logp, r, term, trunc, v, gamma, v_final, cobs)
+                obs, cobs = nxt["policy"], nxt.get("critic")
+            buf.compute_returns(agent.value(cobs if self.critic_split else obs), gamma, agent.cfg.lam)
             t_collect = time.time() - t0
             for name, x in (("obs", buf.obs), ("rewards", buf.rewards), ("actions", buf.raw_actions)):
                 if not torch.isfinite(x).all():
@@ -134,7 +153,8 @@ class Trainer:
             done = self.wall() >= self.budget_s
             if done or time.time() - last_eval >= self.eval_every:
                 self.run_eval("final" if done else "periodic")
-                obs = env.reset()[0]["policy"]
+                o = env.reset()[0]
+                obs, cobs = o["policy"], o.get("critic")
                 env.pop_completed()
                 last_eval = time.time()
             elif time.time() - last_ck >= self.ck_every:

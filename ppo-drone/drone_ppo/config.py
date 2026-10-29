@@ -18,13 +18,36 @@ def env_cfg(c: dict, **overrides):
     cfg.scene.num_envs = e["num_envs"]
     cfg.success_radius, cfg.success_hold_s = e["success_radius"], e["success_hold_s"]
     cfg.rewards = dict(e["rewards"])
+    for k in ("reward_mode", "l2f", "penalty_curriculum", "action_history", "motor_tau", "disturbance_force",
+              "disturbance_torque", "asymmetric_critic"):
+        if k in e:
+            setattr(cfg, k, e[k])
     cfg.curriculum_thresholds = tuple(e["curriculum"]["thresholds"])
     cfg.curriculum_window = e["curriculum"]["window"]
     for k, v in overrides.items():
         setattr(cfg, k, v)
     if cfg.render_scene:
         cfg.scene.clone_in_fabric = False     # rendered prims must exist on the USD stage
+    from . import task as T
+    cfg.observation_space = T.obs_dim(cfg.action_history)
     return cfg
+
+
+def apply_variant(c: dict, name: str | None, path=None) -> dict:
+    """Merge a named variant from configs/variants.yaml into the base config (dicts merge recursively)."""
+    if not name:
+        return c
+    with open(path or ROOT / "configs" / "variants.yaml") as f:
+        variants = yaml.safe_load(f)
+
+    def merge(base, over):
+        out = dict(base)
+        for k, v in over.items():
+            out[k] = merge(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
+        return out
+    c = merge(c, variants[name])
+    c["variant"] = name
+    return c
 
 
 def ppo_cfg(c: dict):

@@ -41,18 +41,19 @@ def clipped_surrogate(new_logp, old_logp, adv, clip: float):
 
 
 class PPO:
-    def __init__(self, obs_dim: int, act_dim: int, cfg: PPOConfig, device="cpu"):
+    def __init__(self, obs_dim: int, act_dim: int, cfg: PPOConfig, device="cpu", critic_dim: int | None = None):
+        """critic_dim: size of the critic's input when it gets privileged observations (asymmetric actor-critic)."""
         self.cfg, self.device = cfg, torch.device(device)
-        self.obs_dim, self.act_dim = obs_dim, act_dim
+        self.obs_dim, self.act_dim, self.critic_dim = obs_dim, act_dim, critic_dim or obs_dim
         self.actor = SquashedGaussianActor(obs_dim, act_dim, cfg.hidden, cfg.init_std).to(self.device)
-        self.critic = Critic(obs_dim, cfg.hidden).to(self.device)
+        self.critic = Critic(self.critic_dim, cfg.hidden).to(self.device)
         self.lr = cfg.lr
         self.opt = torch.optim.Adam(list(self.actor.parameters()) + list(self.critic.parameters()), lr=cfg.lr)
 
     @torch.no_grad()
-    def act(self, obs):
+    def act(self, obs, critic_obs=None):
         u, a, logp = self.actor.sample(obs)
-        return u, a, logp, self.critic(obs)
+        return u, a, logp, self.critic(obs if critic_obs is None else critic_obs)
 
     @torch.no_grad()
     def act_deterministic(self, obs):
@@ -78,7 +79,7 @@ class PPO:
                 new_logp = squash_log_prob(dist, mb["raw_actions"])
                 entropy = dist.entropy().sum(-1).mean()                      # of the pre-squash Gaussian
                 pg_loss, kl, clip_frac = clipped_surrogate(new_logp, mb["log_probs"], adv, c.clip)
-                v = self.critic(mb["obs"])
+                v = self.critic(mb["critic_obs"])
                 v_loss = 0.5 * (v - mb["returns"]).pow(2).mean()
                 loss = pg_loss + c.vf_coef * v_loss - c.ent_coef * entropy
                 self.opt.zero_grad(set_to_none=True)
@@ -106,7 +107,8 @@ class PPO:
 
     def state_dict(self):
         return {"actor": self.actor.state_dict(), "critic": self.critic.state_dict(), "opt": self.opt.state_dict(),
-                "lr": self.lr, "cfg": asdict(self.cfg), "obs_dim": self.obs_dim, "act_dim": self.act_dim}
+                "lr": self.lr, "cfg": asdict(self.cfg), "obs_dim": self.obs_dim, "act_dim": self.act_dim,
+                "critic_dim": self.critic_dim}
 
     def load_state_dict(self, sd, load_optimizer: bool = True):
         self.actor.load_state_dict(sd["actor"])
@@ -123,6 +125,6 @@ class PPO:
         sd = torch.load(path, map_location=device, weights_only=False)
         cfg = dict(sd["cfg"])
         cfg["hidden"], cfg["lr_bounds"] = tuple(cfg["hidden"]), tuple(cfg["lr_bounds"])
-        agent = cls(sd["obs_dim"], sd["act_dim"], PPOConfig(**cfg), device)
+        agent = cls(sd["obs_dim"], sd["act_dim"], PPOConfig(**cfg), device, sd.get("critic_dim"))
         agent.load_state_dict(sd, load_optimizer)
         return agent, sd.get("extra", {})

@@ -26,10 +26,11 @@ def compute_gae(rewards, values, dones, last_values, gamma: float, lam: float):
 
 
 class RolloutBuffer:
-    def __init__(self, num_steps: int, num_envs: int, obs_dim: int, act_dim: int, device):
+    def __init__(self, num_steps: int, num_envs: int, obs_dim: int, act_dim: int, device, critic_dim: int | None = None):
         z = lambda *s: torch.zeros(*s, device=device)
         self.T, self.N = num_steps, num_envs
         self.obs = z(num_steps, num_envs, obs_dim)
+        self.critic_obs = z(num_steps, num_envs, critic_dim) if critic_dim else None   # privileged critic inputs
         self.raw_actions = z(num_steps, num_envs, act_dim)     # pre-tanh samples u
         self.log_probs = z(num_steps, num_envs)
         self.rewards = z(num_steps, num_envs)
@@ -40,13 +41,15 @@ class RolloutBuffer:
         self.step = 0
 
     def add(self, obs, raw_actions, log_probs, rewards, terminated, truncated, values, gamma: float,
-            truncated_values=None):
+            truncated_values=None, critic_obs=None):
         """Store one step. For time-limit truncations, bootstrap: r += gamma * V(s_final)."""
         t = self.step
         r = rewards.clone()
         if truncated_values is not None:
             r = r + gamma * truncated_values * (truncated & ~terminated).float()
         self.obs[t], self.raw_actions[t], self.log_probs[t] = obs, raw_actions, log_probs
+        if self.critic_obs is not None:
+            self.critic_obs[t] = critic_obs
         self.rewards[t], self.dones[t], self.values[t] = r, (terminated | truncated).float(), values
         self.step += 1
 
@@ -58,6 +61,7 @@ class RolloutBuffer:
         flat = {"obs": self.obs.reshape(n, -1), "raw_actions": self.raw_actions.reshape(n, -1),
                 "log_probs": self.log_probs.reshape(n), "values": self.values.reshape(n),
                 "advantages": self.advantages.reshape(n), "returns": self.returns.reshape(n)}
+        flat["critic_obs"] = self.critic_obs.reshape(n, -1) if self.critic_obs is not None else flat["obs"]
         perm = torch.randperm(n, device=self.obs.device)
         size = n // num_minibatches
         for i in range(num_minibatches):

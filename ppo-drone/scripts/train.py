@@ -20,6 +20,7 @@ p.add_argument("--eval_every_min", type=float, default=None)
 p.add_argument("--rollout_steps", type=int, default=None)
 p.add_argument("--seed", type=int, default=None)
 p.add_argument("--resume", default=None)
+p.add_argument("--variant", default=None, help="name in configs/variants.yaml (reward shaping / curriculum experiments)")
 args, app = config.launch(p)
 
 
@@ -30,7 +31,7 @@ def main():
     from drone_ppo.ppo import PPO
     from drone_ppo.trainer import Trainer
 
-    c = config.load(args.config)
+    c = config.apply_variant(config.load(args.config), args.variant)
     tr = c["train"]
     for k in ("budget_min", "eval_every_min", "rollout_steps", "seed"):
         if getattr(args, k) is not None:
@@ -42,7 +43,8 @@ def main():
     with open(os.path.join(args.out, "config.json"), "w") as f:
         json.dump({"config": c, "args": vars(args)}, f, indent=1, default=str)
     env = config.make_env(c, seed=tr["seed"])
-    agent = PPO(T.OBS_DIM, T.ACT_DIM, config.ppo_cfg(c), env.device)
+    agent = PPO(env.obs_dim, T.ACT_DIM, config.ppo_cfg(c), env.device,
+                env.critic_dim if env.critic_dim != env.obs_dim else None)
     Trainer(env, agent, args.out, tr["rollout_steps"], tr["budget_min"], tr["eval_every_min"],
             tr["checkpoint_every_min"], tr["selection_seed"], args.resume, c).train()
 

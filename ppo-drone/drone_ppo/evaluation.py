@@ -60,10 +60,16 @@ def summarize(r: dict) -> dict:
         "time_to_hover_s": mean(r["time_to_hover_s"]),
         "episode_length_s": mean(r["length_s"]),
         "mean_return": mean(r["return"]),
+        # stability over the last 2 s of episodes that did not fail
+        "ang_speed_last_2s": mean(r["tail_ang_speed"], ok) if "tail_ang_speed" in r else nan,
+        "ang_acc_last_2s": mean(r["tail_ang_acc"], ok) if "tail_ang_acc" in r else nan,
+        "action_rate_last_2s": mean(r["tail_action_rate"], ok) if "tail_action_rate" in r else nan,
+        "tilt_deg_last_2s": mean(r["tail_tilt_deg"], ok) if "tail_tilt_deg" in r else nan,
+        "max_tilt_deg": mean(r["max_tilt_deg"]) if "max_tilt_deg" in r else nan,
     }
 
 
-SUITES = {"hover": 0, "reach": 1, "robust": 2}
+SUITES = {"hover": 0, "reach": 1, "robust": 2, "recovery": 3}
 
 
 def evaluate(env, policy, seed: int, suites=("hover", "robust")) -> dict:

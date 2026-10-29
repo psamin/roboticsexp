@@ -16,6 +16,7 @@ p.add_argument("--checkpoint", default="outputs/run/checkpoints/best.pt")
 p.add_argument("--num_envs", type=int, default=1024)
 p.add_argument("--seed", type=int, default=2000)
 p.add_argument("--out", default="outputs/logs/eval_results.json")
+p.add_argument("--policies", default="ppo,pd,random")
 args, app = config.launch(p)
 
 
@@ -34,12 +35,14 @@ def main():
     pols = {"ppo": agent.act_deterministic, "pd": pd, "random": T.RandomPolicy(gen)}
     res = {"checkpoint": args.checkpoint, "iteration": extra.get("iteration"), "steps": extra.get("steps"),
            "test_seed": args.seed, "episodes_per_suite": env.num_envs, "policies": {}}
+    pols = {k: v for k, v in pols.items() if k in args.policies.split(",")}
     for name, pol in pols.items():
-        res["policies"][name] = evaluate(env, pol, args.seed, suites=("hover", "reach", "robust"))
+        res["policies"][name] = evaluate(env, pol, args.seed, suites=("hover", "reach", "robust", "recovery"))
         for suite, r in res["policies"][name].items():
-            print(f"[eval] {name:7s} {suite:7s} success {r['hover_success_rate']:.3f} crash {r['crash_rate']:.3f} "
+            print(f"[eval] {name:7s} {suite:8s} success {r['hover_success_rate']:.3f} crash {r['crash_rate']:.3f} "
                   f"final dist {r['final_dist_m']:.3f} m  last-2s dist {r['mean_dist_last_2s_m']:.3f} m  "
-                  f"time to hover {r['time_to_hover_s']:.2f} s", flush=True)
+                  f"time to hover {r['time_to_hover_s']:.2f} s  |w| {r['ang_speed_last_2s']:.3f} rad/s  "
+                  f"|da| {r['action_rate_last_2s']:.4f}  max tilt {r['max_tilt_deg']:.1f} deg", flush=True)
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(res, f, indent=1)
