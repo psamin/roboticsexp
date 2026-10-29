@@ -47,6 +47,10 @@ def dress_scene(origin, floor_grey: float = 0.62):
     key.CreateIntensityAttr(2200.0)
     key.CreateAngleAttr(2.0)
     UsdGeom.Xformable(key).AddRotateXYZOp().Set(Gf.Vec3f(40.0, 0.0, 140.0))
+    fill = UsdLux.DistantLight.Define(stage, "/World/Fill")     # soft fill from the camera side (+x, -y, above)
+    fill.CreateIntensityAttr(1100.0)
+    fill.CreateAngleAttr(8.0)
+    UsdGeom.Xformable(fill).AddRotateXYZOp().Set(Gf.Vec3f(52.5, 0.0, 39.8))
 
     return TargetSphere(stage)
 
