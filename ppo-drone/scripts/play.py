@@ -27,6 +27,7 @@ p.add_argument("--height", type=int, default=1080)
 p.add_argument("--view", choices=("close", "split"), default="close",
                help="close: one camera following the drone; split: follow + wide side by side")
 p.add_argument("--no_overlay", action="store_true")
+p.add_argument("--no_outline", action="store_true", help="skip the orange outline around the drone")
 p.add_argument("--style", choices=("isaac", "white", "studio"), default="isaac")
 p.add_argument("--gui", action="store_true")
 p.add_argument("--render_passes", type=int, default=3, help="renders per video frame; >1 removes motion ghosting")
@@ -83,7 +84,7 @@ def main():
     wide = S.CAMERAS["wide"]
     S.define_camera(stage, "/World/CamWide", wide["eye"], wide["target"], wide["focal"], W, H, origin)
     S.set_quality("rt", auto_exposure=(args.style == "studio"))
-    grab = S.Grabber({"follow": "/World/CamFollow", "wide": "/World/CamWide"}, W, H)
+    grab = S.Grabber({"follow": "/World/CamFollow", "wide": "/World/CamWide"}, W, H, segment=not args.no_outline)
     follow_xf = UsdGeom.Xformable(stage.GetPrimAtPath("/World/CamFollow")).GetOrderedXformOps()[0]
     conds = make_conditions(args.suite, args.episodes, args.seed, dev)
     os.makedirs(os.path.dirname(args.video) or ".", exist_ok=True)
@@ -118,6 +119,8 @@ def main():
             d = float(np.linalg.norm(pos - tgt))
             dists.append(d)
             f, wv = grab.get("follow"), grab.get("wide")
+            if f is not None and not args.no_outline:
+                f = S.outline(f, grab.mask("follow", "/World/envs/env_0/Robot"))
             if f is not None and wv is not None:
                 lines = [label, f"episode {ep + 1}/{args.episodes}   t = {k * env.step_dt:4.1f} s",
                          f"distance to target {100 * d:5.1f} cm"]

@@ -24,6 +24,8 @@ p.add_argument("--reach_cm", type=float, default=6.0)
 p.add_argument("--hold_s", type=float, default=0.4)
 p.add_argument("--max_s", type=float, default=4.0)
 p.add_argument("--render_passes", type=int, default=3, help="renders per video frame; >1 removes motion ghosting")
+p.add_argument("--trail", action="store_true", help="draw the flown path")
+p.add_argument("--no_outline", action="store_true", help="skip the orange outline around the drone")
 args, app = config.launch(p, cameras=True)
 
 # env-frame waypoints (m): a loop at varying heights, hops of 0.6-0.9 m (inside the trained target offsets)
@@ -75,17 +77,18 @@ def main():
         for i, sp in enumerate(spheres):
             key = "next" if i == cur else ("done" if i < cur else "later")
             UsdShade.MaterialBindingAPI.Apply(sp.GetPrim()).Bind(mats[key])
-    trail = UsdGeom.BasisCurves.Define(stage, "/World/Trail")
-    trail.CreateTypeAttr(UsdGeom.Tokens.linear)
-    trail.CreateWidthsAttr(Vt.FloatArray([0.006]))
-    trail.SetWidthsInterpolation(UsdGeom.Tokens.constant)
-    UsdShade.MaterialBindingAPI.Apply(trail.GetPrim()).Bind(mats["trail"])
-    UsdGeom.PrimvarsAPI(trail).CreatePrimvar("doNotCastShadows", Sdf.ValueTypeNames.Bool).Set(True)
+    if args.trail:
+        trail = UsdGeom.BasisCurves.Define(stage, "/World/Trail")
+        trail.CreateTypeAttr(UsdGeom.Tokens.linear)
+        trail.CreateWidthsAttr(Vt.FloatArray([0.006]))
+        trail.SetWidthsInterpolation(UsdGeom.Tokens.constant)
+        UsdShade.MaterialBindingAPI.Apply(trail.GetPrim()).Bind(mats["trail"])
+        UsdGeom.PrimvarsAPI(trail).CreatePrimvar("doNotCastShadows", Sdf.ValueTypeNames.Bool).Set(True)
 
     W, H = args.width, args.height
     S.define_camera(stage, "/World/CamTour", (2, -2, 3), (0, 0, 1), 28.0, W, H, o.tolist())
     S.set_quality("rt", auto_exposure=(args.style == "studio"))
-    grab = S.Grabber({"tour": "/World/CamTour"}, W, H)
+    grab = S.Grabber({"tour": "/World/CamTour"}, W, H, segment=not args.no_outline)
     cam_xf = UsdGeom.Xformable(stage.GetPrimAtPath("/World/CamTour")).GetOrderedXformOps()[0]
 
     start = torch.tensor([ROUTE[0]], device=dev, dtype=torch.float32)
@@ -126,16 +129,22 @@ def main():
             if cur < len(route):
                 env.target_w[0] = torch.tensor(o + route[cur], device=dev, dtype=torch.float32)
             paint(cur)
-        pts.append(Gf.Vec3f(*pos))
-        trail.CreatePointsAttr(Vt.Vec3fArray(pts[-1500:]))
-        trail.CreateCurveVertexCountsAttr(Vt.IntArray([len(pts[-1500:])]))
+        if args.trail:
+            pts.append(Gf.Vec3f(*pos))
+            trail.CreatePointsAttr(Vt.Vec3fArray(pts[-1500:]))
+            trail.CreateCurveVertexCountsAttr(Vt.IntArray([len(pts[-1500:])]))
         look = 0.93 * look + 0.07 * pos
-        eye = look + np.array([1.05, -1.05, 1.55])                     # ~48 degrees down, diagonal
+        eye = look + np.array([0.9, -0.9, 1.35])                       # ~47 degrees down, diagonal
         view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*map(float, eye)), Gf.Vec3d(*map(float, look)), Gf.Vec3d(0, 0, 1))
         cam_xf.Set(view.GetInverse())
         for _ in range(args.render_passes):
             env.sim.render()
         img = grab.get("tour")
+        if img is not None and not args.no_outline:
+            m = grab.mask("tour", "/World/envs/env_0/Robot")
+            if k == 4:
+                print(f"[tour] outline mask pixels: {0 if m is None else int(m.sum())}", flush=True)
+            img = S.outline(img, m)
         if img is not None and k > 3:
             clean.append_data(img)
             im = Image.fromarray(img)
@@ -154,6 +163,8 @@ def main():
         obs, *_ = env.step(agent.act_deterministic(obs["policy"]))
         env.sim.render()
         img = grab.get("tour")
+        if img is not None and not args.no_outline:
+            img = S.outline(img, grab.mask("tour", "/World/envs/env_0/Robot"))
         if img is not None:
             clean.append_data(img)
             writer.append_data(img)

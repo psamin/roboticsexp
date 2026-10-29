@@ -1,0 +1,26 @@
+{
+ "iterations": 2310,
+ "steps": 227082240,
+ "wall_min": 20.19599267641703,
+ "best_score": 0.9757826912216843,
+ "num_envs": 4096,
+ "rollout_steps": 24,
+ "curriculum": {
+  "stage": 2,
+  "history": [
+   {
+    "from": 0,
+    "to": 1,
+    "rate": 0.80029296875,
+    "step": 1865
+   },
+   {
+    "from": 1,
+    "to": 2,
+    "rate": 0.98681640625,
+    "step": 2794
+   }
+  ]
+ },
+ "device": "NVIDIA GB10"
+}

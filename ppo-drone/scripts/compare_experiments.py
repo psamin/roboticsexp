@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from drone_ppo.plots import INK, INK2, SURFACE, _style
+from drone_ppo.plots import INK2, SURFACE, _style
 
 COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"]
 ORDER = ["baseline", "stability", "shaped_nospin", "l2f", "l2f_full", "l2f_full_nospin", "l2f_motor_lag"]
@@ -72,8 +72,6 @@ def main():
         for ax, key in ((axes[0], "robust_hover_success_rate"), (axes[1], "robust_final_dist_m")):
             y = [e.get(key, math.nan) for e in hist[v]]
             ax.plot(t, y, color=COLORS[i], linewidth=2, marker="o", markersize=4, markeredgecolor=SURFACE, label=v)
-            ax.annotate(v, xy=(t[-1], y[-1]), xytext=(5, 0), textcoords="offset points", fontsize=8.5, color=INK,
-                        va="center")
     axes[0].set_ylim(0, 1.04)
     axes[1].set_yscale("log")
     axes[0].legend(frameon=False, fontsize=9, labelcolor=INK2, loc="lower right")
@@ -82,19 +80,25 @@ def main():
     plt.close(fig)
 
     # stability metrics, robust and recovery suites
-    metrics = [("hover_success_rate", "hover success"), ("final_dist_m", "final distance (m)"),
-               ("ang_speed_last_2s", "body rate, last 2 s (rad/s)"), ("action_rate_last_2s", "action jitter, last 2 s")]
-    fig, axes = plt.subplots(1, len(metrics), figsize=(18, 4.4), dpi=140, facecolor=SURFACE)
-    for ax, (key, title) in zip(axes, metrics):
+    metrics = [("hover_success_rate", "hover success", "linear"), ("final_dist_m", "final distance (m, log)", "log"),
+               ("ang_speed_last_2s", "body rate, last 2 s (rad/s, log)", "log"),
+               ("action_rate_last_2s", "action jitter, last 2 s (symlog)", "symlog")]
+    fig, axes = plt.subplots(1, len(metrics), figsize=(18, 4.8), dpi=140, facecolor=SURFACE)
+    for ax, (key, title, scale) in zip(axes, metrics):
         _style(ax, title, xlabel="")
+        if scale == "symlog":
+            ax.set_yscale("symlog", linthresh=1e-4)
+        else:
+            ax.set_yscale(scale)
         w = 0.8 / max(len(found), 1)
         for i, v in enumerate(found):
             xs = [j + (i - (len(found) - 1) / 2) * w for j in range(2)]
             ys = [res[v]["policies"]["ppo"][s].get(key, math.nan) for s in ("robust", "recovery")]
             ax.bar(xs, ys, width=w - 0.02, color=COLORS[i], label=v, edgecolor=SURFACE, linewidth=1.5)
         ax.set_xticks([0, 1], ["robust", "recovery"])
-    axes[0].legend(frameon=False, fontsize=8.5, labelcolor=INK2)
-    fig.tight_layout()
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=len(found), frameon=False, fontsize=9.5, labelcolor=INK2)
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
     fig.savefig(os.path.join(a.out, "stability.png"), facecolor=SURFACE)
     plt.close(fig)
     print("wrote", a.out)

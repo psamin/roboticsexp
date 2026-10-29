@@ -24,6 +24,7 @@ p.add_argument("--spp", type=int, default=256)
 p.add_argument("--fly_s", type=float, default=5.0)
 p.add_argument("--dump_settings", action="store_true", help="print renderer settings related to fog/exposure")
 p.add_argument("--style", choices=("isaac", "white", "studio"), default="isaac")
+p.add_argument("--no_outline", action="store_true", help="skip the orange outline around the drone")
 args, app = config.launch(p, cameras=True)
 
 
@@ -95,7 +96,7 @@ def main():
             elif any(w in path.lower() for w in ("fog", "atmos", "vignet", "falloff", "horizon", "distance")):
                 print(f"[settings] {path} = {d}", flush=True)
         walk(carb.settings.get_settings().get("/rtx"), "/rtx")
-    grab = S.Grabber({"cam": "/World/Cam"}, args.width, args.height)
+    grab = S.Grabber({"cam": "/World/Cam"}, args.width, args.height, segment=not args.no_outline)
     for _ in range((args.spp // 16 + 40) if args.mode == "pt" else 120):
         env.sim.render()
     img = None
@@ -106,6 +107,8 @@ def main():
         env.sim.render()
     if img is None:
         raise RuntimeError("no image from the annotator")
+    if not args.no_outline:
+        img = S.outline(img, grab.mask("cam", "/World/envs/env_0/Robot"), width=max(2, args.height // 360))
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     iio.imwrite(args.out, img)
     drone = env.robot.data.root_pos_w[0].tolist()

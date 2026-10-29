@@ -45,4 +45,48 @@ python scripts/compare_experiments.py --exp outputs/exp --out outputs/exp/report
 VARIANT=stability sbatch --export=ALL cluster/experiment.sbatch
 ```
 
-<!-- EXPERIMENT RESULTS -->
+## Results
+
+Six variants, 20 minutes each on one DGX Spark GPU (4,096 drones, 2,190–2,450 PPO updates, ~215–240 M steps),
+**one seed each**. Held-out test set (seed 2000), 1,024 episodes per suite, deterministic policy. Full tables for
+all four suites: [outputs/exp/report/comparison.md](outputs/exp/report/comparison.md).
+
+| variant | robust: success / crash | robust: distance at end | recovery (never trained on): success | body rate while hovering |
+|---|---|---|---|---|
+| baseline (shaped reward) | 99.0% / 1.0% | 2.7 cm | 100.0% | 2.0 rad/s |
+| stability (+ wobble, jerk, action-rate, tilt penalties) | 84.3% / 15.7% | 18.0 cm | 99.7% | 3.0 rad/s |
+| **shaped_nospin** (+ body-rate penalty) | **100.0% / 0.0%** | **1.2 cm** | **100.0%** | **0.4–0.5 rad/s** |
+| l2f (paper reward + penalty curriculum) | 100.0% / 0.0% | 2.5 cm | 100.0% | 13 rad/s |
+| l2f_full (+ action history, asymmetric critic, disturbances) | 100.0% / 0.0% | 0.3 cm | 100.0% | **101 rad/s** |
+| l2f_full_nospin (+ angular-velocity weight 0.05) | 96.4% / 3.6% | 4.5 cm | 99.7% | 1.2 rad/s |
+| PD controller (reference) | 100.0% / 0.0% | 2.6 cm | 100.0% | 0 |
+
+![Learning curves](outputs/exp/report/learning_curves.png)
+![Stability metrics](outputs/exp/report/stability.png)
+
+What came out of it:
+
+1. **Every first-round policy hovered while spinning about its thrust axis.** Yaw rate equals body rate in every
+   row, so the spin is pure yaw. Nothing in those rewards charged for it: the shaped reward's body-rate weight was
+   0.01, and the L2F angular-velocity weight is 0, as in the paper's code. The paper avoids the problem through its
+   orientation cost, 1 − q_w², which also charges for heading changes; the tilt-only version used here (see above)
+   removed that, so spinning became free. l2f_full took this furthest, at 101 rad/s (~16 revolutions per second), while being the most precise
+   variant (0.3 cm). Success rate and distance alone would have ranked it best; the spin only showed up in the
+   stability columns.
+2. **A body-rate penalty removes the spin without costing accuracy.** shaped_nospin is the best variant overall:
+   100% on all four suites, 1.2 cm on robust, 0.2 cm on recovery, 0.4–0.5 rad/s. The cost is slower settling
+   (robust time to hover 1.05 s vs 0.73 s for baseline). The same fix on l2f_full dropped the spin to 1.2 rad/s
+   but robust success fell from 100% to 96.4%.
+3. **More unstable-flight penalties at once hurt.** The stability variant learned slowest and finished worst
+   (84.3% robust, 15.7% crashes): heavier tilt, action-rate, wobble and jerk penalties together appear to stop it
+   from making the aggressive corrections the robust suite needs.
+4. **The L2F curriculum matched the shaped reward on success** (l2f 100% vs baseline 99.0% on robust, similar
+   distance) with no reward tuning beyond the paper's constants. l2f_full's held-out success dipped to 32% at
+   minute 8 before recovering; the cause was not investigated.
+
+Caveats: one seed per variant, so differences of a few percent (96.4% vs 100%, 99.0% vs 100%) are within what
+seed-to-seed variation could produce; that variation was not measured. The 60-minute main run in the README
+used the baseline reward.
+
+Next: rerun shaped_nospin and l2f_full_nospin with 3+ seeds; try l2f_full with the paper's full-quaternion
+orientation cost instead of an angular-velocity penalty; and run l2f_motor_lag, which has not been run yet.

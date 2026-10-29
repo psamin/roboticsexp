@@ -26,10 +26,10 @@ def dress_scene(origin, style: str = "isaac", floor_grey: float = 0.8):
         if style == "white":
             _floor(stage, origin, 0.95)
         dome = UsdLux.DomeLight.Define(stage, "/World/Sky")
-        dome.CreateIntensityAttr(2000.0 if style == "isaac" else 2600.0)
+        dome.CreateIntensityAttr(4500.0 if style == "isaac" else 2600.0)   # light grey Isaac-style look
         dome.CreateColorAttr(Gf.Vec3f(0.75, 0.75, 0.75) if style == "isaac" else Gf.Vec3f(1.0, 1.0, 1.0))
         key = UsdLux.DistantLight.Define(stage, "/World/Key")
-        key.CreateIntensityAttr(1500.0)
+        key.CreateIntensityAttr(2500.0 if style == "isaac" else 1500.0)
         key.CreateAngleAttr(3.0)
         UsdGeom.Xformable(key).AddRotateXYZOp().Set(Gf.Vec3f(30.0, 0.0, 140.0))
         return TargetSphere(stage)
@@ -108,10 +108,10 @@ def make_renderable(stage, path: str, dark: bool = True) -> int:
         mat = UsdShade.Material.Define(stage, "/World/Looks/DroneBlack")
         sh = UsdShade.Shader.Define(stage, "/World/Looks/DroneBlack/PBR")
         sh.CreateIdAttr("UsdPreviewSurface")
-        sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.02, 0.02, 0.022))
-        sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.85)          # matte: no sky glints when it yaws
+        sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.006, 0.006, 0.007))
+        sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.9)           # matte: no sky glints when it yaws
         sh.CreateInput("useSpecularWorkflow", Sdf.ValueTypeNames.Int).Set(1)
-        sh.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.015, 0.015, 0.015))
+        sh.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.006, 0.006, 0.006))
         mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
         UsdShade.MaterialBindingAPI.Apply(stage.GetPrimAtPath(path)).Bind(mat, UsdShade.Tokens.strongerThanDescendants)
     return n
@@ -155,17 +155,45 @@ def set_quality(mode="pt", spp_total=256, spp_frame=16, auto_exposure=True):
 
 
 class Grabber:
-    def __init__(self, cams: dict, width: int, height: int):
+    def __init__(self, cams: dict, width: int, height: int, segment: bool = False):
         import omni.replicator.core as rep
-        self.annot = {}
+        self.annot, self.seg = {}, {}
         for name, path in cams.items():
             rp = rep.create.render_product(path, (width, height))
             a = rep.AnnotatorRegistry.get_annotator("rgb")
             a.attach([rp])
             self.annot[name] = a
+            if segment:     # per-pixel instance ids, used to outline the drone's actual rendered silhouette
+                sa = rep.AnnotatorRegistry.get_annotator("instance_id_segmentation_fast")
+                sa.attach([rp])
+                self.seg[name] = sa
+
+    def mask(self, name, path_prefix: str):
+        """Boolean mask of pixels belonging to prims under path_prefix (from the instance-id segmentation)."""
+        d = self.seg[name].get_data()
+        if not isinstance(d, dict) or d.get("data") is None:
+            return None
+        ids = np.asarray(d["data"])
+        labels = d.get("info", {}).get("idToLabels", {})
+        hits = [int(k) for k, v in labels.items() if path_prefix in str(v)]
+        return np.isin(ids, hits) if hits else None
 
     def get(self, name):
         d = self.annot[name].get_data()
         if d is None or getattr(d, "size", 0) == 0:
             return None
         return np.asarray(d)[..., :3].copy()
+
+
+def outline(img, mask, color=(255, 122, 26), width: int = 3):
+    """Draw a solid outline of `width` pixels just outside the masked region."""
+    if mask is None or not mask.any():
+        return img
+    grown = mask.copy()
+    for dy in range(-width, width + 1):
+        for dx in range(-width, width + 1):
+            if dx * dx + dy * dy <= width * width:
+                grown |= np.roll(np.roll(mask, dy, axis=0), dx, axis=1)
+    out = img.copy()
+    out[grown & ~mask] = color
+    return out

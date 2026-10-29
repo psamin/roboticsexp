@@ -1,0 +1,83 @@
+{
+ "checkpoint": "/nethome-instruction/pi34/ppo-drone-results/exp/l2f/train/checkpoints/best.pt",
+ "iteration": 2189,
+ "steps": 215187456,
+ "test_seed": 2000,
+ "episodes_per_suite": 1024,
+ "policies": {
+  "ppo": {
+   "hover": {
+    "episodes": 1024,
+    "hover_success_rate": 1.0,
+    "crash_rate": 0.0,
+    "out_of_bounds_rate": 0.0,
+    "final_dist_m": 0.0189204141497612,
+    "final_dist_median_m": 0.018920347094535828,
+    "mean_dist_last_2s_m": 0.018920691683888435,
+    "time_to_hover_s": 0.1022656261920929,
+    "episode_length_s": 9.979999542236328,
+    "mean_return": 99.6412582397461,
+    "ang_speed_last_2s": 13.079130172729492,
+    "yaw_rate_last_2s": 13.064252853393555,
+    "ang_acc_last_2s": 1.1119078397750854,
+    "action_rate_last_2s": 0.0021452042274177074,
+    "tilt_deg_last_2s": 2.732484817504883,
+    "max_tilt_deg": 6.612193584442139
+   },
+   "reach": {
+    "episodes": 1024,
+    "hover_success_rate": 1.0,
+    "crash_rate": 0.0,
+    "out_of_bounds_rate": 0.0,
+    "final_dist_m": 0.018920527771115303,
+    "final_dist_median_m": 0.018920594826340675,
+    "mean_dist_last_2s_m": 0.01892070285975933,
+    "time_to_hover_s": 0.4993554353713989,
+    "episode_length_s": 9.979999542236328,
+    "mean_return": 98.78713989257812,
+    "ang_speed_last_2s": 13.079130172729492,
+    "yaw_rate_last_2s": 13.064251899719238,
+    "ang_acc_last_2s": 1.090795636177063,
+    "action_rate_last_2s": 0.0020938331726938486,
+    "tilt_deg_last_2s": 2.7325048446655273,
+    "max_tilt_deg": 26.75691032409668
+   },
+   "robust": {
+    "episodes": 1024,
+    "hover_success_rate": 1.0,
+    "crash_rate": 0.0,
+    "out_of_bounds_rate": 0.0,
+    "final_dist_m": 0.024979809299111366,
+    "final_dist_median_m": 0.023814598098397255,
+    "mean_dist_last_2s_m": 0.024948373436927795,
+    "time_to_hover_s": 0.6460741758346558,
+    "episode_length_s": 9.979999542236328,
+    "mean_return": 96.78224182128906,
+    "ang_speed_last_2s": 13.069565773010254,
+    "yaw_rate_last_2s": 13.053572654724121,
+    "ang_acc_last_2s": 4.290151596069336,
+    "action_rate_last_2s": 0.005126332864165306,
+    "tilt_deg_last_2s": 3.0930073261260986,
+    "max_tilt_deg": 45.34589767456055
+   },
+   "recovery": {
+    "episodes": 1024,
+    "hover_success_rate": 1.0,
+    "crash_rate": 0.0,
+    "out_of_bounds_rate": 0.0,
+    "final_dist_m": 0.01892084628343582,
+    "final_dist_median_m": 0.018920769914984703,
+    "mean_dist_last_2s_m": 0.018920887261629105,
+    "time_to_hover_s": 0.4502343535423279,
+    "episode_length_s": 9.979999542236328,
+    "mean_return": 99.2569580078125,
+    "ang_speed_last_2s": 13.079127311706543,
+    "yaw_rate_last_2s": 13.064249038696289,
+    "ang_acc_last_2s": 1.08644437789917,
+    "action_rate_last_2s": 0.002084446372464299,
+    "tilt_deg_last_2s": 2.7324905395507812,
+    "max_tilt_deg": 34.09512710571289
+   }
+  }
+ }
+}
