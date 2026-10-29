@@ -17,7 +17,7 @@ cd "$PROJ"
 set +e
 F='^\s*$|\[Warning\]|\[Info\]|deprecated|UserWarning|warnings.warn|cuda capability|Minimum and Maximum|\(8.0\) - \(12.0\)|^\||isaaclab_tasks|freedreno|_internal.py|simulation_app.py|app_launcher.py|PythonExtension'
 echo "== variant $VARIANT"
-run_py scripts/train.py --variant "$VARIANT" --budget_min ${BUDGET_MIN:-20} --num_envs ${NUM_ENVS:-4096} \
+[ "${EVAL_ONLY:-0}" = 1 ] || run_py scripts/train.py --variant "$VARIANT" --budget_min ${BUDGET_MIN:-20} --num_envs ${NUM_ENVS:-4096} \
   --out "$OUT/train" 2>&1 | grep --line-buffered -vE "$F"
 POL=ppo; [ "${BASELINES:-0}" = 1 ] && POL=ppo,pd,random
 run_py scripts/evaluate.py --checkpoint "$OUT/train/checkpoints/best.pt" --policies $POL --out "$OUT/eval.json" 2>&1 \

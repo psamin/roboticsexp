@@ -104,7 +104,7 @@ class DroneHoverEnv(DirectRLEnv):
         self.succeeded = torch.zeros(n, dtype=torch.bool, device=dev)
         self.success_step = torch.full((n,), -1, dtype=torch.long, device=dev)
         self.started = torch.zeros(n, dtype=torch.bool, device=dev)
-        self.stats = {k: z(n) for k in ("dist", "tail_dist", "tail_n", "tail_ang_speed", "tail_ang_acc",
+        self.stats = {k: z(n) for k in ("dist", "tail_dist", "tail_n", "tail_ang_speed", "tail_yaw_rate", "tail_ang_acc",
                                         "tail_action_rate", "tail_tilt", "max_tilt")}
         self.last_dist = z(n)
         self.final_obs, self.final_critic_obs = z(n, self.obs_dim), z(n, self.critic_dim)
@@ -225,6 +225,7 @@ class DroneHoverEnv(DirectRLEnv):
         s["tail_n"] += tail
         s["tail_dist"] += tail * dist
         s["tail_ang_speed"] += tail * ang_vel.norm(dim=-1)
+        s["tail_yaw_rate"] += tail * ang_vel[:, 2].abs()
         s["tail_ang_acc"] += tail * ang_acc.norm(dim=-1)
         s["tail_action_rate"] += tail * (self.actions - self.prev_actions).norm(dim=-1)
         s["tail_tilt"] += tail * tilt
@@ -309,6 +310,7 @@ class DroneHoverEnv(DirectRLEnv):
             "mean_dist": s["dist"][ids] / length,
             "tail_dist": tail("tail_dist"),
             "tail_ang_speed": tail("tail_ang_speed"),         # rad/s, last 2 s
+            "tail_yaw_rate": tail("tail_yaw_rate"),           # |w_z| rad/s, last 2 s (spinning about the thrust axis)
             "tail_ang_acc": tail("tail_ang_acc"),             # rad/s^2, last 2 s (wobble)
             "tail_action_rate": tail("tail_action_rate"),     # |a_t - a_t-1|, last 2 s (control jitter)
             "tail_tilt_deg": tail("tail_tilt"),

@@ -62,6 +62,7 @@ def summarize(r: dict) -> dict:
         "mean_return": mean(r["return"]),
         # stability over the last 2 s of episodes that did not fail
         "ang_speed_last_2s": mean(r["tail_ang_speed"], ok) if "tail_ang_speed" in r else nan,
+        "yaw_rate_last_2s": mean(r["tail_yaw_rate"], ok) if "tail_yaw_rate" in r else nan,
         "ang_acc_last_2s": mean(r["tail_ang_acc"], ok) if "tail_ang_acc" in r else nan,
         "action_rate_last_2s": mean(r["tail_action_rate"], ok) if "tail_action_rate" in r else nan,
         "tilt_deg_last_2s": mean(r["tail_tilt_deg"], ok) if "tail_tilt_deg" in r else nan,

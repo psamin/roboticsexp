@@ -60,3 +60,27 @@ l2f_motor_lag:
     action_history: 32
     asymmetric_critic: true
     motor_tau: 0.03
+
+# Follow-ups after the first round: every policy hovered while spinning (2-3 rad/s for the shaped reward, ~100 rad/s
+# for l2f_full, whose tilt-only orientation cost and zero angular-velocity weight make spinning free). These add a
+# direct body-rate penalty.
+shaped_nospin:
+  env:
+    rewards:
+      ang_vel: 1.0          # |w|^2 (was 0.01): 3 rad/s now costs 0.18 per step-second
+      ang_acc: 0.5
+      lin_acc: 0.5
+
+l2f_full_nospin:
+  env:
+    reward_mode: l2f
+    l2f: {position: 5.0, orientation: 5.0, linear_velocity: 0.01, angular_velocity: 0.05, action: 0.01}
+    penalty_curriculum:
+      every: 20
+      gate: 0.7
+      factors: {position: 1.2, linear_velocity: 1.4, action: 1.4}
+      caps: {position: 40.0, linear_velocity: 1.0, action: 1.0}
+    action_history: 32
+    asymmetric_critic: true
+    disturbance_force: 0.05
+    disturbance_torque: 2.6e-5

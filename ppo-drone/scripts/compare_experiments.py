@@ -17,14 +17,15 @@ import matplotlib.pyplot as plt
 
 from drone_ppo.plots import INK, INK2, SURFACE, _style
 
-COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]
-ORDER = ["baseline", "stability", "l2f", "l2f_full", "l2f_motor_lag"]
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"]
+ORDER = ["baseline", "stability", "shaped_nospin", "l2f", "l2f_full", "l2f_full_nospin", "l2f_motor_lag"]
 SUITES = ["hover", "reach", "robust", "recovery"]
 COLS = [("hover_success_rate", "success", lambda v: f"{100*v:.1f}%"),
         ("crash_rate", "crash", lambda v: f"{100*v:.1f}%"),
         ("final_dist_m", "final dist", lambda v: f"{100*v:.1f} cm"),
         ("time_to_hover_s", "time to hover", lambda v: f"{v:.2f} s"),
-        ("ang_speed_last_2s", "body rate, last 2 s", lambda v: f"{v:.3f} rad/s"),
+        ("ang_speed_last_2s", "body rate, last 2 s", lambda v: f"{v:.2f} rad/s"),
+        ("yaw_rate_last_2s", "yaw rate, last 2 s", lambda v: f"{v:.2f} rad/s"),
         ("ang_acc_last_2s", "wobble, last 2 s", lambda v: f"{v:.1f} rad/s²"),
         ("action_rate_last_2s", "action jitter, last 2 s", lambda v: f"{v:.4f}"),
         ("max_tilt_deg", "max tilt", lambda v: f"{v:.1f}°")]

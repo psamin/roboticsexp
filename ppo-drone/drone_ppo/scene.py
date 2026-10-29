@@ -108,8 +108,10 @@ def make_renderable(stage, path: str, dark: bool = True) -> int:
         mat = UsdShade.Material.Define(stage, "/World/Looks/DroneBlack")
         sh = UsdShade.Shader.Define(stage, "/World/Looks/DroneBlack/PBR")
         sh.CreateIdAttr("UsdPreviewSurface")
-        sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.025, 0.025, 0.028))
-        sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.45)
+        sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.02, 0.02, 0.022))
+        sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.85)          # matte: no sky glints when it yaws
+        sh.CreateInput("useSpecularWorkflow", Sdf.ValueTypeNames.Int).Set(1)
+        sh.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.015, 0.015, 0.015))
         mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
         UsdShade.MaterialBindingAPI.Apply(stage.GetPrimAtPath(path)).Bind(mat, UsdShade.Tokens.strongerThanDescendants)
     return n
