@@ -40,6 +40,8 @@ isaac_env() {
   # isaaclab's deps can pull a different torch build; put back the aarch64 cu130 one Isaac Lab documents
   "$UV" pip install -q -U $TORCH_SPEC --index-url "$TORCH_INDEX"
   "$UV" pip install -q imageio imageio-ffmpeg matplotlib tensorboard pyyaml pytest h5py
+  # the torch -U above pulls numpy 2.x from the PyTorch index; Isaac Sim 5.1's replicator/syntheticdata need 1.26
+  "$UV" pip install -q "numpy==1.26.4"
   PY=$WORK/venv/bin/python
   # Kit on aarch64 needs libgomp preloaded (it prints this exact fix otherwise)
   local gomp_torch
