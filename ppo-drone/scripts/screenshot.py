@@ -71,14 +71,15 @@ def main():
         o = torch.tensor(origin, device=dev)
         p_d = env.robot.data.root_pos_w[0] - o
         # frame the drone and its shadow on the floor (the shadow shows it is airborne)
+        # camera above the drone looking down ~20 deg: drone in the upper third, its shadow in the lower part
+        # (framings solved with scene.project for a 16:9 frame; see the screenshot JSON for the measured positions)
+        x, y, z = p_d.tolist()
         if agent is None:
-            look = (p_d * torch.tensor([1.0, 1.0, 0.0], device=dev) + torch.tensor([0, 0, 0.42], device=dev) * p_d[2])
-            look = look.tolist()
-            cam = {"eye": (look[0] + 0.42, look[1] - 0.33, look[2] + 0.10), "target": tuple(look), "focal": 26.0}
+            cam = {"eye": (x + 0.47, y - 0.37, z + 0.19), "target": (x, y, 0.72 * z), "focal": 26.0}
         else:
-            mid = 0.5 * (p_d + env.target_w[0] - o)
-            look = (mid * torch.tensor([1.0, 1.0, 0.5], device=dev)).tolist()
-            cam = {"eye": (look[0] + 0.9, look[1] - 0.7, look[2] + 0.15), "target": tuple(look), "focal": 22.0}
+            mid = (0.5 * (p_d + env.target_w[0] - o)).tolist()
+            cam = {"eye": (x + 0.85, y - 0.68, z + 0.20), "target": (mid[0] - 0.02, mid[1] - 0.02, 0.62 * z),
+                   "focal": 17.0}
     else:
         cam = S.CAMERAS[cam_name]
     stage = omni.usd.get_context().get_stage()

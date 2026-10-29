@@ -68,6 +68,7 @@ class TargetSphere:
         sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.35)
         mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
         UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(mat)
+        UsdGeom.PrimvarsAPI(sphere).CreatePrimvar("doNotCastShadows", Sdf.ValueTypeNames.Bool).Set(True)
         self.op = UsdGeom.Xformable(sphere).AddTranslateOp()
 
     def visualize(self, translations):
