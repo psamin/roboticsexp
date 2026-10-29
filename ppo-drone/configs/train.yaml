@@ -1,0 +1,43 @@
+# PPO drone hover configuration. CLI flags in scripts/train.py override these.
+env:
+  num_envs: 4096
+  success_radius: 0.10       # m
+  success_hold_s: 1.0        # continuous seconds inside the radius that count as a hover success
+  rewards:                   # task.RewardWeights; per-step terms are multiplied by the 0.02 s control step
+    distance: 15.0
+    precision: 5.0
+    lin_vel: 0.05
+    near_target_gain: 4.0
+    ang_vel: 0.01
+    upright: 1.0
+    effort: 0.05
+    action_rate: 0.05
+    success: 5.0
+    crash: 5.0
+  curriculum:
+    thresholds: [0.8, 0.8]   # hover-success rate needed to leave stage 1 (hover), then stage 2 (reach)
+    window: 2048
+
+ppo:
+  gamma: 0.99
+  lam: 0.95
+  clip: 0.2
+  lr: 3.0e-4
+  epochs: 4
+  num_minibatches: 4
+  ent_coef: 0.0
+  vf_coef: 1.0
+  max_grad_norm: 1.0
+  adaptive_lr: true
+  desired_kl: 0.01
+  hidden: [128, 128]
+  init_std: 0.5
+
+train:
+  rollout_steps: 24
+  budget_min: 60
+  eval_every_min: 4
+  checkpoint_every_min: 5
+  seed: 1
+  selection_seed: 1000       # held-out conditions for picking best.pt
+  test_seed: 2000            # separate held-out conditions for the final report
