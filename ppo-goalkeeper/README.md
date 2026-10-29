@@ -4,7 +4,33 @@ A Clearpath Jackal with a blocking panel learns to save rolling penalty shots in
 Proximal Policy Optimization written from scratch in PyTorch. The environment uses Isaac Lab's direct workflow
 with 1,024 parallel keepers on one GPU.
 
-<!-- RESULTS -->
+![Goalkeeper scene before training](outputs/screenshots/goalkeeper_hero.png)
+
+## Results (60-minute run, held-out test shots)
+
+One run on one DGX Spark GPU: 1,024 parallel keepers, 60.2 min of training, 91 M environment steps, 2,788 PPO
+updates; the curriculum reached the advanced level in the first minutes. `best.pt` was picked on a held-out selection
+set; these numbers come from a separate test set (seed 2000), 1,024 shots per level, deterministic policy.
+Save rate counts on-target shots only.
+
+| keeper | beginner | intermediate | advanced (5–8 m/s, noise, latency) |
+|---|---|---|---|
+| **PPO** | **100.0%** | **99.9%** | **99.0%** |
+| analytical (predicts the crossing point, brakes optimally) | 100.0% | 100.0% | 98.9% |
+| random actions | 64.8% | 54.2% | 38.0% |
+
+On advanced shots, 95% are physically reachable from the keeper's start; the analytical keeper saves all of those.
+PPO matches it. Untrained, the policy saved 89% / 48% / 44% (its first held-out evaluation). Rendered playback of 10
+advanced shots: PPO 10/10, analytical 10/10, random 4/10 ([play_summary_advanced.json](outputs/logs/play_summary_advanced.json)).
+
+Plots: [save_rate.png](outputs/plots/save_rate.png), [eval_save_rates.png](outputs/plots/eval_save_rates.png),
+[training_diagnostics.png](outputs/plots/training_diagnostics.png). Logs: [verify.json](outputs/logs/verify.json)
+(physics checks and baselines), [metrics.csv](outputs/logs/metrics.csv), [eval_results.md](outputs/logs/eval_results.md).
+
+Notes on what went wrong along the way, for anyone extending this: the Jackal asset ships with wheel friction 0.2 and
+its wheel colliders lose contact against a very large box ground, so the keeper first sank and skidded (fixed with an
+infinite ground plane and rubber-on-turf friction 0.9/0.85); and on the original 4–6 m/s "advanced" shots both PPO
+and the analytical keeper saved 100%, so that level was made harder (5–8 m/s, keeper start ±0.8 m).
 
 ## The setup
 

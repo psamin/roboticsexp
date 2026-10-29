@@ -1,0 +1,160 @@
+{
+ "settings": {
+  "/rtx/rendermode": "PathTracing",
+  "/rtx/pathtracing/totalSpp": 256,
+  "/rtx/post/histogram/enabled": true
+ },
+ "width": 2560,
+ "height": 1440,
+ "mode": "pt",
+ "spp": 256,
+ "views": {
+  "hero": {
+   "file": "/nethome-instruction/pi34/ppo-goalkeeper-results/run-12858/screenshots/goalkeeper_hero_studio.png",
+   "bytes": 3057317,
+   "shape": [
+    1440,
+    2560,
+    3
+   ],
+   "mean": 126.56288881655092,
+   "std": 57.36442743213127,
+   "dark_frac": 0.00031087239583333336,
+   "bright_frac": 0.0,
+   "unique_colors_sampled": 4570,
+   "landmarks": {
+    "ball": {
+     "uv": [
+      1026,
+      1314
+     ],
+     "in_frame": true,
+     "radius_px": 86.9
+    },
+    "keeper_base": {
+     "uv": [
+      1283,
+      892
+     ],
+     "in_frame": true,
+     "radius_px": 81.2
+    },
+    "keeper_panel_top": {
+     "uv": [
+      1278,
+      779
+     ],
+     "in_frame": true,
+     "radius_px": 16.8
+    },
+    "left_post_top": {
+     "uv": [
+      1785,
+      237
+     ],
+     "in_frame": true,
+     "radius_px": 19.0
+    },
+    "right_post_top": {
+     "uv": [
+      805,
+      243
+     ],
+     "in_frame": true,
+     "radius_px": 18.7
+    },
+    "right_post_base": {
+     "uv": [
+      810,
+      889
+     ],
+     "in_frame": true,
+     "radius_px": 18.5
+    },
+    "net_back_centre": {
+     "uv": [
+      1308,
+      585
+     ],
+     "in_frame": true,
+     "radius_px": 56.3
+    }
+   },
+   "hfov_deg": 45.5
+  },
+  "angle": {
+   "file": "/nethome-instruction/pi34/ppo-goalkeeper-results/run-12858/screenshots/goalkeeper_angle_studio.png",
+   "bytes": 5194826,
+   "shape": [
+    1440,
+    2560,
+    3
+   ],
+   "mean": 103.58423629195602,
+   "std": 44.28465244148201,
+   "dark_frac": 1.8174913194444443e-05,
+   "bright_frac": 0.0,
+   "unique_colors_sampled": 7226,
+   "landmarks": {
+    "ball": {
+     "uv": [
+      2285,
+      1188
+     ],
+     "in_frame": true,
+     "radius_px": 53.3
+    },
+    "keeper_base": {
+     "uv": [
+      773,
+      687
+     ],
+     "in_frame": true,
+     "radius_px": 71.5
+    },
+    "keeper_panel_top": {
+     "uv": [
+      814,
+      599
+     ],
+     "in_frame": true,
+     "radius_px": 14.8
+    },
+    "left_post_top": {
+     "uv": [
+      1032,
+      69
+     ],
+     "in_frame": true,
+     "radius_px": 15.9
+    },
+    "right_post_top": {
+     "uv": [
+      220,
+      105
+     ],
+     "in_frame": true,
+     "radius_px": 20.0
+    },
+    "right_post_base": {
+     "uv": [
+      292,
+      766
+     ],
+     "in_frame": true,
+     "radius_px": 18.6
+    },
+    "net_back_centre": {
+     "uv": [
+      536,
+      372
+     ],
+     "in_frame": true,
+     "radius_px": 52.8
+    }
+   },
+   "hfov_deg": 50.9
+  }
+ },
+ "render_wall_s": 81.8
+}

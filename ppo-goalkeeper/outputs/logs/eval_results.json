@@ -1,0 +1,140 @@
+{
+ "checkpoint": "/nethome-instruction/pi34/ppo-goalkeeper-results/run-12858/train/checkpoints/best.pt",
+ "checkpoint_iteration": 1180,
+ "checkpoint_steps": 38666240,
+ "test_seed": 2000,
+ "policies": {
+  "ppo": {
+   "beginner": {
+    "shots": 1024,
+    "on_target": 1024,
+    "save_rate": 1.0,
+    "goal_rate": 0.0,
+    "on_target_missed": 0.0,
+    "timeouts": 0,
+    "reachable_share": 1.0,
+    "save_rate_reachable": 1.0,
+    "off_target_shots": 0,
+    "off_target_miss_rate": NaN,
+    "contact_vs_geom_agree": 1.0,
+    "mean_return": 10.260738372802734
+   },
+   "intermediate": {
+    "shots": 1024,
+    "on_target": 1024,
+    "save_rate": 0.9990234375,
+    "goal_rate": 0.0,
+    "on_target_missed": 0.0,
+    "timeouts": 1,
+    "reachable_share": 1.0,
+    "save_rate_reachable": 0.9990234375,
+    "off_target_shots": 0,
+    "off_target_miss_rate": NaN,
+    "contact_vs_geom_agree": 1.0,
+    "mean_return": 10.408432960510254
+   },
+   "advanced": {
+    "shots": 1024,
+    "on_target": 907,
+    "save_rate": 0.9900771775082691,
+    "goal_rate": 0.009922822491730982,
+    "on_target_missed": 0.0,
+    "timeouts": 0,
+    "reachable_share": 0.9558985667034179,
+    "save_rate_reachable": 1.0,
+    "off_target_shots": 117,
+    "off_target_miss_rate": 0.9487179487179487,
+    "contact_vs_geom_agree": 0.984375,
+    "mean_return": 9.381226539611816
+   }
+  },
+  "analytical": {
+   "beginner": {
+    "shots": 1024,
+    "on_target": 1024,
+    "save_rate": 1.0,
+    "goal_rate": 0.0,
+    "on_target_missed": 0.0,
+    "timeouts": 0,
+    "reachable_share": 1.0,
+    "save_rate_reachable": 1.0,
+    "off_target_shots": 0,
+    "off_target_miss_rate": NaN,
+    "contact_vs_geom_agree": 1.0,
+    "mean_return": 10.19981575012207
+   },
+   "intermediate": {
+    "shots": 1024,
+    "on_target": 1024,
+    "save_rate": 1.0,
+    "goal_rate": 0.0,
+    "on_target_missed": 0.0,
+    "timeouts": 0,
+    "reachable_share": 1.0,
+    "save_rate_reachable": 1.0,
+    "off_target_shots": 0,
+    "off_target_miss_rate": NaN,
+    "contact_vs_geom_agree": 1.0,
+    "mean_return": 10.367507934570312
+   },
+   "advanced": {
+    "shots": 1024,
+    "on_target": 907,
+    "save_rate": 0.9889746416758545,
+    "goal_rate": 0.009922822491730982,
+    "on_target_missed": 0.0,
+    "timeouts": 1,
+    "reachable_share": 0.9558985667034179,
+    "save_rate_reachable": 0.9988465974625144,
+    "off_target_shots": 117,
+    "off_target_miss_rate": 0.9487179487179487,
+    "contact_vs_geom_agree": 0.984375,
+    "mean_return": 9.3529634475708
+   }
+  },
+  "random": {
+   "beginner": {
+    "shots": 1024,
+    "on_target": 1024,
+    "save_rate": 0.6484375,
+    "goal_rate": 0.349609375,
+    "on_target_missed": 0.0,
+    "timeouts": 2,
+    "reachable_share": 1.0,
+    "save_rate_reachable": 0.6484375,
+    "off_target_shots": 0,
+    "off_target_miss_rate": NaN,
+    "contact_vs_geom_agree": 0.9248046875,
+    "mean_return": 2.4974045753479004
+   },
+   "intermediate": {
+    "shots": 1024,
+    "on_target": 1024,
+    "save_rate": 0.5419921875,
+    "goal_rate": 0.4580078125,
+    "on_target_missed": 0.0,
+    "timeouts": 0,
+    "reachable_share": 1.0,
+    "save_rate_reachable": 0.5419921875,
+    "off_target_shots": 0,
+    "off_target_miss_rate": NaN,
+    "contact_vs_geom_agree": 0.9150390625,
+    "mean_return": 0.7590389847755432
+   },
+   "advanced": {
+    "shots": 1024,
+    "on_target": 907,
+    "save_rate": 0.38037486218302097,
+    "goal_rate": 0.619625137816979,
+    "on_target_missed": 0.0,
+    "timeouts": 0,
+    "reachable_share": 0.9558985667034179,
+    "save_rate_reachable": 0.39792387543252594,
+    "off_target_shots": 117,
+    "off_target_miss_rate": 0.9914529914529915,
+    "contact_vs_geom_agree": 0.9462890625,
+    "mean_return": -1.679060459136963
+   }
+  }
+ }
+}

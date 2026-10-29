@@ -1,0 +1,170 @@
+{
+ "ppo": {
+  "episodes": 12,
+  "on_target": 10,
+  "saves": 10,
+  "save_rate": 1.0,
+  "results": [
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "miss",
+    "on_target": false
+   },
+   {
+    "outcome": "miss",
+    "on_target": false
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   }
+  ]
+ },
+ "analytical": {
+  "episodes": 12,
+  "on_target": 10,
+  "saves": 10,
+  "save_rate": 1.0,
+  "results": [
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "miss",
+    "on_target": false
+   },
+   {
+    "outcome": "miss",
+    "on_target": false
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   }
+  ]
+ },
+ "random": {
+  "episodes": 12,
+  "on_target": 10,
+  "saves": 4,
+  "save_rate": 0.4,
+  "results": [
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "goal",
+    "on_target": true
+   },
+   {
+    "outcome": "save",
+    "on_target": true
+   },
+   {
+    "outcome": "miss",
+    "on_target": false
+   },
+   {
+    "outcome": "miss",
+    "on_target": false
+   },
+   {
+    "outcome": "goal",
+    "on_target": true
+   },
+   {
+    "outcome": "goal",
+    "on_target": true
+   },
+   {
+    "outcome": "goal",
+    "on_target": true
+   },
+   {
+    "outcome": "goal",
+    "on_target": true
+   },
+   {
+    "outcome": "goal",
+    "on_target": true
+   }
+  ]
+ }
+}

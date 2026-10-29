@@ -4,3 +4,5 @@ __pycache__/
 outputs/logs/**/events.out.tfevents.*
 outputs/checkpoints/*_iter*.pt
 asset_cache/
+outputs/run-*/
+outputs/videos/*.mp4
