@@ -1,0 +1,41 @@
+{
+ "file": "/nethome-instruction/pi34/ppo-drone-results/run-12871/screenshots/drone_ppo_trained.png",
+ "shape": [
+  1440,
+  2560,
+  3
+ ],
+ "mean": 90.97463288483796,
+ "std": 18.402012938220903,
+ "mode": "pt",
+ "spp": 256,
+ "camera": "closeup",
+ "policy": "ppo",
+ "distance_to_target_m": 0.1114653905208512,
+ "landmarks": {
+  "drone": {
+   "world": [
+    0.143,
+    0.055,
+    0.57
+   ],
+   "uv": [
+    1251,
+    335
+   ],
+   "in_frame": true
+  },
+  "target": {
+   "world": [
+    0.2,
+    0.12,
+    0.5
+   ],
+   "uv": [
+    1413,
+    467
+   ],
+   "in_frame": true
+  }
+ }
+}

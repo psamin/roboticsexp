@@ -95,14 +95,23 @@ class TargetSphere:
         self.op.Set(Gf.Vec3d(*[float(x) for x in translations[0]]))
 
 
-def make_renderable(stage, path: str) -> int:
-    """Instanced meshes under physics-driven links do not render on DGX Spark (Isaac Sim 5.1); de-instance them."""
+def make_renderable(stage, path: str, dark: bool = True) -> int:
+    """Instanced meshes under physics-driven links do not render on DGX Spark (Isaac Sim 5.1); de-instance them.
+    dark: matte black plastic (as on a real Crazyflie 2.x) so the drone stands out against light backgrounds."""
     from pxr import Usd
     n = 0
     for p in Usd.PrimRange(stage.GetPrimAtPath(path)):
         if p.IsInstanceable():
             p.SetInstanceable(False)
             n += 1
+    if dark:
+        mat = UsdShade.Material.Define(stage, "/World/Looks/DroneBlack")
+        sh = UsdShade.Shader.Define(stage, "/World/Looks/DroneBlack/PBR")
+        sh.CreateIdAttr("UsdPreviewSurface")
+        sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.025, 0.025, 0.028))
+        sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.45)
+        mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
+        UsdShade.MaterialBindingAPI.Apply(stage.GetPrimAtPath(path)).Bind(mat, UsdShade.Tokens.strongerThanDescendants)
     return n
 
 

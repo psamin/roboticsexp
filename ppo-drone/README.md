@@ -4,7 +4,34 @@ A Crazyflie quadcopter in NVIDIA Isaac Sim learns to fly to a target and hover t
 Optimization implemented directly in PyTorch (no RL library). The environment is adapted from Isaac Lab's
 open-source `Isaac-Quadcopter-Direct-v0` task: same Crazyflie asset, same thrust/torque interface, same physics rates.
 
-<!-- RESULTS -->
+![Crazyflie in Isaac Sim before training](outputs/screenshots/drone_ppo_setup_closeup.png)
+
+## Results (60-minute run, held-out test conditions)
+
+One run on one DGX Spark GPU: 4,096 parallel drones, 60.2 min of training, 830 M environment steps
+(~277 k samples/s), 8,441 PPO updates. The curriculum moved from hover to reach to robust within the first minutes.
+`best.pt` was picked on a held-out selection set; the numbers below come from a separate test set (seed 2000),
+1,024 episodes per suite, deterministic policy.
+
+| policy | suite | hover success | crash | distance at end | time to hover |
+|---|---|---|---|---|---|
+| **PPO** | hover | **100.0%** | 0.0% | 3.1 cm | 0.09 s |
+| **PPO** | reach (random targets) | **100.0%** | 0.0% | 3.1 cm | 0.48 s |
+| **PPO** | robust (tilt, side force) | **98.9%** | 1.1% | 4.4 cm | 0.69 s |
+| PD controller | hover / reach / robust | 100% / 100% / 100% | 0% | 0.0 / 0.0 / 2.6 cm | 0.15 / 0.78 / 1.09 s |
+| random actions | all | 0% | 100% (within 0.2 s) | | |
+| untrained policy (verify step) | hover | 0.4% | 3.5% (99% leave the volume) | 2.1 m | |
+
+What this shows: PPO learns a working controller from scratch. Held-out hover success went from ~1% to 100% within
+about 4 minutes (see [training_curves.png](outputs/plots/training_curves.png)). It reaches targets faster than the
+PD controller but settles with a steady ~3 cm offset where the PD controller settles to ~0, and its precision drifted
+from ~1 cm (minute 8) to ~3–5 cm later in training while success stayed at ~99–100%. Those are the motivation for the
+reward-shaping and curriculum experiments in [EXPERIMENTS.md](EXPERIMENTS.md).
+
+Media: [setup close-up](outputs/screenshots/drone_ppo_setup_closeup.png) (before training),
+[trained](outputs/screenshots/drone_ppo_trained.png), and policy-driven videos in [outputs/videos/](outputs/videos/).
+Full logs: [eval_results.md](outputs/logs/eval_results.md), [verify.json](outputs/logs/verify.json),
+[metrics.csv](outputs/logs/metrics.csv).
 
 ## The setup
 
