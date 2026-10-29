@@ -10,7 +10,7 @@
 #SBATCH -t 0:45:00
 #SBATCH -o /nethome-instruction/pi34/logs/%x-%j.log
 source "${PROJ:-/nethome-instruction/pi34/roboticsexp/ppo-drone}/cluster/common.sh"
-OUT=$HOME_DIR/ppo-drone-results/exp/$VARIANT
+OUT=$HOME_DIR/ppo-drone-results/exp/${OUTNAME:-$VARIANT}
 mkdir -p "$OUT"
 isaac_env
 cd "$PROJ"

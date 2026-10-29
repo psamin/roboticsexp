@@ -85,7 +85,7 @@ def main():
         cam = S.CAMERAS[cam_name]
     stage = omni.usd.get_context().get_stage()
     view = S.define_camera(stage, "/World/Cam", cam["eye"], cam["target"], cam["focal"], args.width, args.height, origin)
-    S.set_quality(args.mode, spp_total=args.spp, auto_exposure=(args.style != "white"))
+    S.set_quality(args.mode, spp_total=args.spp, auto_exposure=(args.style == "studio"))
     if args.dump_settings:
         import carb
         def walk(d, path):

@@ -29,6 +29,7 @@ p.add_argument("--view", choices=("close", "split"), default="close",
 p.add_argument("--no_overlay", action="store_true")
 p.add_argument("--style", choices=("isaac", "white", "studio"), default="isaac")
 p.add_argument("--gui", action="store_true")
+p.add_argument("--render_passes", type=int, default=3, help="renders per video frame; >1 removes motion ghosting")
 args, app = config.launch(p, cameras=True)
 
 
@@ -81,7 +82,7 @@ def main():
                     W, H, origin)
     wide = S.CAMERAS["wide"]
     S.define_camera(stage, "/World/CamWide", wide["eye"], wide["target"], wide["focal"], W, H, origin)
-    S.set_quality("rt", auto_exposure=(args.style != "white"))
+    S.set_quality("rt", auto_exposure=(args.style == "studio"))
     grab = S.Grabber({"follow": "/World/CamFollow", "wide": "/World/CamWide"}, W, H)
     follow_xf = UsdGeom.Xformable(stage.GetPrimAtPath("/World/CamFollow")).GetOrderedXformOps()[0]
     conds = make_conditions(args.suite, args.episodes, args.seed, dev)
@@ -112,7 +113,8 @@ def main():
                 eye, aim = look + np.array([0.55, -0.45, 0.05]), look
             view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*map(float, eye)), Gf.Vec3d(*map(float, aim)), Gf.Vec3d(0, 0, 1))
             follow_xf.Set(view.GetInverse())
-            env.sim.render()
+            for _ in range(args.render_passes):
+                env.sim.render()
             d = float(np.linalg.norm(pos - tgt))
             dists.append(d)
             f, wv = grab.get("follow"), grab.get("wide")

@@ -23,11 +23,12 @@ p.add_argument("--height", type=int, default=1080)
 p.add_argument("--reach_cm", type=float, default=6.0)
 p.add_argument("--hold_s", type=float, default=0.4)
 p.add_argument("--max_s", type=float, default=4.0)
+p.add_argument("--render_passes", type=int, default=3, help="renders per video frame; >1 removes motion ghosting")
 args, app = config.launch(p, cameras=True)
 
-# env-frame waypoints (m): a loop at varying heights, hops of 0.9-1.3 m (inside the trained target offsets)
-ROUTE = [(0.0, 0.0, 1.0), (0.55, 0.5, 1.25), (-0.45, 0.55, 0.8), (-0.55, -0.45, 1.2), (0.5, -0.5, 0.75),
-         (0.0, 0.0, 1.0)]
+# env-frame waypoints (m): a loop at varying heights, hops of 0.6-0.9 m (inside the trained target offsets)
+ROUTE = [(0.0, 0.0, 1.0), (0.6, 0.0, 1.2), (0.3, 0.6, 0.8), (-0.4, 0.5, 1.25), (-0.7, -0.1, 0.85),
+         (-0.2, -0.65, 1.15), (0.55, -0.5, 0.8), (0.0, 0.0, 1.0)]
 
 
 def main():
@@ -58,9 +59,9 @@ def main():
         sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(rough)
         m.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
         return m
-    mats = {"next": material("/World/Looks/WpNext", (0.06, 0.78, 0.25)),
-            "later": material("/World/Looks/WpLater", (0.55, 0.78, 0.6)),
-            "done": material("/World/Looks/WpDone", (0.82, 0.82, 0.82)),
+    mats = {"next": material("/World/Looks/WpNext", (0.03, 0.85, 0.25)),
+            "later": material("/World/Looks/WpLater", (0.14, 0.36, 0.2)),
+            "done": material("/World/Looks/WpDone", (0.12, 0.12, 0.13)),
             "trail": material("/World/Looks/Trail", (0.16, 0.47, 0.84), 0.6)}
     spheres = []
     for i, w in enumerate(ROUTE[1:]):
@@ -83,7 +84,7 @@ def main():
 
     W, H = args.width, args.height
     S.define_camera(stage, "/World/CamTour", (2, -2, 3), (0, 0, 1), 28.0, W, H, o.tolist())
-    S.set_quality("rt", auto_exposure=(args.style != "white"))
+    S.set_quality("rt", auto_exposure=(args.style == "studio"))
     grab = S.Grabber({"tour": "/World/CamTour"}, W, H)
     cam_xf = UsdGeom.Xformable(stage.GetPrimAtPath("/World/CamTour")).GetOrderedXformOps()[0]
 
@@ -132,7 +133,8 @@ def main():
         eye = look + np.array([1.05, -1.05, 1.55])                     # ~48 degrees down, diagonal
         view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*map(float, eye)), Gf.Vec3d(*map(float, look)), Gf.Vec3d(0, 0, 1))
         cam_xf.Set(view.GetInverse())
-        env.sim.render()
+        for _ in range(args.render_passes):
+            env.sim.render()
         img = grab.get("tour")
         if img is not None and k > 3:
             clean.append_data(img)
