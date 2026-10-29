@@ -29,8 +29,8 @@ on-target shots only; wide shots never count as saves.
 | level | speed | aim (on the goal line) | keeper start | extras |
 |---|---|---|---|---|
 | beginner | 3-4 m/s | within 0.6 m of centre | centre | |
-| intermediate | 3.5-5 m/s | within 1.0 m | within 0.25 m | |
-| advanced | 4-6 m/s | within 1.35 m (+10% wide shots) | within 0.5 m | observation noise, 33 ms actuation latency on half the shots |
+| intermediate | 3.5-5.5 m/s | within 1.0 m | within 0.3 m | |
+| advanced | 5-8 m/s | within 1.35 m (+10% wide shots) | within 0.8 m | observation noise (2 cm, 0.1 m/s), 33 ms actuation latency on half the shots |
 
 ## Repository layout
 

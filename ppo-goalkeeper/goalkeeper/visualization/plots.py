@@ -62,13 +62,20 @@ def learning_curves(run_dir, out_dir, baselines: dict | None = None):
     # 1. headline: held-out save rate per level, with baselines on the advanced level
     fig, ax = plt.subplots(figsize=(9, 5.2), dpi=160, facecolor=SURFACE)
     _style(ax, "Held-out save rate during PPO training (on-target shots)", "save rate")
+    ends = []
     for lv, c in SERIES.items():
         ys = [e.get(f"{lv}_save_rate", math.nan) for e in ev]
         ax.plot(et, ys, color=c, linewidth=2, marker="o", markersize=5, label=lv,
                 markeredgecolor=SURFACE, markeredgewidth=1.5)
         if ys:
-            ax.annotate(f"{lv} {100*ys[-1]:.0f}%", xy=(et[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
-                        va="center", fontsize=9, color=INK)
+            ends.append([ys[-1], f"{lv} {100*ys[-1]:.1f}%"])
+    # end labels, nudged apart so equal final values do not overprint
+    dx = 0.015 * max(et) if et else 0.0
+    prev = None
+    for y, text in sorted(ends, key=lambda e: -e[0]):
+        y_lab = y if prev is None else min(y, prev - 0.045)
+        prev = y_lab
+        ax.annotate(text, xy=(et[-1], y), xytext=(et[-1] + dx, y_lab), fontsize=9, color=INK, va="center")
     if baselines:
         if "analytical" in baselines:
             _ref(ax, baselines["analytical"]["advanced"]["save_rate"],

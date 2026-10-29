@@ -12,6 +12,7 @@ p.add_argument("--run", default="outputs/run")
 p.add_argument("--eval", default="outputs/logs/eval_results.json")
 p.add_argument("--out", default="outputs/plots")
 a = p.parse_args()
+os.makedirs(a.out, exist_ok=True)
 
 baselines = None
 if os.path.exists(a.eval):

@@ -27,8 +27,9 @@ stage "1/8 unit tests"
 stage "2/8 build + verify physics and baselines"
 run_py scripts/verify_env.py --num_envs "$NUM_ENVS" --out "$OUT/logs/verify.json" 2>&1 | grep --line-buffered -vE "$FILTER"
 
-stage "3/8 screenshot (before any training)"
-run_py scripts/capture_screenshot.py --out_dir "$OUT/screenshots" --spp ${SPP:-512} 2>&1 | grep --line-buffered -vE "$FILTER"
+stage "3/8 screenshots (before any training): sky-only (default file names) and studio-grey variants"
+run_py scripts/capture_screenshot.py --out_dir "$OUT/screenshots" --spp ${SPP:-256} --sky puresky 2>&1 | grep --line-buffered -vE "$FILTER"
+run_py scripts/capture_screenshot.py --out_dir "$OUT/screenshots" --spp ${SPP:-256} --sky studio --suffix _studio 2>&1 | grep --line-buffered -vE "$FILTER"
 
 stage "4/8 PPO smoke test (2 min, 256 envs)"
 run_py scripts/train.py --num_envs 256 --budget_min 2 --eval_every_min 1 --out "$OUT/smoke" 2>&1 \
