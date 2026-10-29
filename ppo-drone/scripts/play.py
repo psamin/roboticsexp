@@ -22,8 +22,11 @@ p.add_argument("--episode_s", type=float, default=7.0)
 p.add_argument("--suite", type=int, default=1, help="0 hover, 1 reach, 2 robust")
 p.add_argument("--seed", type=int, default=3000)
 p.add_argument("--video", default="outputs/videos/drone_ppo_demo.mp4")
-p.add_argument("--width", type=int, default=1280)
-p.add_argument("--height", type=int, default=720)
+p.add_argument("--width", type=int, default=1920)
+p.add_argument("--height", type=int, default=1080)
+p.add_argument("--view", choices=("shadow", "split"), default="shadow",
+               help="shadow: one camera above the drone with its shadow in frame; split: follow + wide side by side")
+p.add_argument("--no_overlay", action="store_true")
 p.add_argument("--gui", action="store_true")
 args, app = config.launch(p, cameras=True)
 
@@ -73,16 +76,31 @@ def main():
     stage = omni.usd.get_context().get_stage()
     origin = env.scene.env_origins[0].tolist()
     W, H = args.width, args.height
-    S.define_camera(stage, "/World/CamFollow", (1.0, -0.8, 1.2), (0, 0, 1.0), 32.0, W, H, origin)
+    S.define_camera(stage, "/World/CamFollow", (1.0, -0.8, 1.2), (0, 0, 1.0), 22.0 if args.view == "shadow" else 32.0,
+                    W, H, origin)
     wide = S.CAMERAS["wide"]
     S.define_camera(stage, "/World/CamWide", wide["eye"], wide["target"], wide["focal"], W, H, origin)
     S.set_quality("rt")
     grab = S.Grabber({"follow": "/World/CamFollow", "wide": "/World/CamWide"}, W, H)
     follow_xf = UsdGeom.Xformable(stage.GetPrimAtPath("/World/CamFollow")).GetOrderedXformOps()[0]
     conds = make_conditions(args.suite, args.episodes, args.seed, dev)
+    if args.view == "shadow":
+        # low targets (inside the trained 0.5-1.5 m range) keep the drone's shadow in frame; starts stay inside the
+        # trained start distribution (within 0.3 m of the 1 m hover point)
+        g = torch.Generator(device=dev).manual_seed(args.seed)
+        u = lambda *sh: torch.rand(*sh, device=dev, generator=g)
+        n = args.episodes
+        # targets 0.25-0.32 m up keep drone and shadow in one close frame. The policy observes only the target
+        # relative to itself (never its altitude), so this is the same task it trained on; starts sit 0.15-0.3 m
+        # above and up to 0.3 m beside the target, inside the trained start offsets.
+        conds["target"] = torch.stack([(2 * u(n) - 1) * 0.3, (2 * u(n) - 1) * 0.3, 0.25 + 0.07 * u(n)], -1)
+        conds["start"] = conds["target"] + torch.stack([(2 * u(n) - 1) * 0.3, (2 * u(n) - 1) * 0.3,
+                                                         0.15 + 0.15 * u(n)], -1)
     os.makedirs(os.path.dirname(args.video) or ".", exist_ok=True)
-    writer = iio.get_writer(args.video, fps=round(1 / env.step_dt), codec="libx264", quality=8, macro_block_size=8,
-                            ffmpeg_params=["-pix_fmt", "yuv420p"])
+    mk = lambda path: iio.get_writer(path, fps=round(1 / env.step_dt), codec="libx264", quality=8, macro_block_size=8,
+                                     ffmpeg_params=["-pix_fmt", "yuv420p"])
+    writer = mk(args.video)
+    clean = mk(os.path.splitext(args.video)[0] + "_clean.mp4") if args.view == "shadow" else None
     o = np.asarray(origin)
     log = []
     for ep in range(args.episodes):
@@ -97,9 +115,13 @@ def main():
             obs, _, term, trunc, _ = env.step(policy(obs["policy"]))
             pos = env.robot.data.root_pos_w[0].cpu().numpy()
             tgt = env.target_w[0].cpu().numpy()
-            look = 0.9 * look + 0.1 * (0.5 * pos + 0.5 * tgt)          # smoothed follow camera
-            eye = look + np.array([0.55, -0.45, 0.05])     # just above the drone: backdrop and floor horizon behind it
-            view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*eye), Gf.Vec3d(*look), Gf.Vec3d(0, 0, 1))
+            look = 0.9 * look + 0.1 * (0.5 * pos + 0.5 * tgt)          # smoothed follow point
+            if args.view == "shadow":   # above the drone looking ~20 deg down: drone upper third, shadow below
+                eye = look + np.array([0.6, -0.48, 0.22])
+                aim = np.array([look[0], look[1], o[2] + 0.6 * (look[2] - o[2])])
+            else:
+                eye, aim = look + np.array([0.55, -0.45, 0.05]), look
+            view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*eye), Gf.Vec3d(*aim), Gf.Vec3d(0, 0, 1))
             follow_xf.Set(view.GetInverse())
             env.sim.render()
             d = float(np.linalg.norm(pos - tgt))
@@ -108,7 +130,10 @@ def main():
             if f is not None and wv is not None:
                 lines = [label, f"episode {ep + 1}/{args.episodes}   t = {k * env.step_dt:4.1f} s",
                          f"distance to target {100 * d:5.1f} cm"]
-                writer.append_data(np.concatenate([overlay(f, lines), wv], axis=1))
+                frame = f if args.no_overlay else overlay(f, lines)
+                writer.append_data(frame if args.view == "shadow" else np.concatenate([frame, wv], axis=1))
+                if clean is not None:
+                    clean.append_data(f)
             if bool(term[0]) or bool(trunc[0]):
                 break
         log.append({"episode": ep, "final_dist_m": dists[-1], "min_dist_m": min(dists),
@@ -116,6 +141,8 @@ def main():
                     "failed": bool(term[0])})
         print(f"[play] episode {ep + 1}: final distance {100 * dists[-1]:.1f} cm, failed={bool(term[0])}", flush=True)
     writer.close()
+    if clean is not None:
+        clean.close()
     with open(os.path.splitext(args.video)[0] + ".json", "w") as fh:
         json.dump({"policy": args.policy, "checkpoint": args.checkpoint, "episodes": log}, fh, indent=1)
     print("PLAY_DONE", flush=True)
