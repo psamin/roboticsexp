@@ -10,5 +10,5 @@ source "${PROJ:-/nethome-instruction/pi34/roboticsexp/ppo-goalkeeper}/cluster/co
 isaac_env
 "$UV" pip list 2>/dev/null | grep -iE "^(isaacsim |isaaclab|torch|warp|numpy|gymnasium)" || true
 set +e
-run_py "$PROJ/scripts/probe_isaaclab.py" 2>&1 | grep -vE "^\s*$|\[Warning\].*(deprecated|carb.audio)" | tail -150
-echo PROBE_EXIT=$?
+run_py "$PROJ/scripts/probe_isaaclab.py" 2>&1 | grep --line-buffered -vE "^\s*$|\[Warning\]|\[Info\]|deprecated"
+echo PROBE_EXIT=${PIPESTATUS[0]}

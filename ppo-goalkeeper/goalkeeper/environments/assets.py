@@ -185,7 +185,6 @@ def build_ball(football_usdc: Path, out: Path, lin_damping=0.08, ang_damping=0.3
     rb.CreateAngularDampingAttr(ang_damping)
     rb.CreateMaxAngularVelocityAttr(20000.0)          # deg/s; the default would cap a fast-rolling ball's spin
     rb.CreateMaxDepenetrationVelocityAttr(3.0)
-    rb.CreateEnableCCDAttr(True)
     mat = _physics_material(stage, "/Ball/Leather", 0.6, 0.5, 0.6)
     col = UsdGeom.Sphere.Define(stage, "/Ball/Collision")
     col.CreateRadiusAttr(F.BALL_RADIUS)

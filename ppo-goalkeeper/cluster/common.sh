@@ -39,7 +39,7 @@ isaac_env() {
       --extra-index-url https://pypi.nvidia.com --index-strategy unsafe-best-match
   # isaaclab's deps can pull a different torch build; put back the aarch64 cu130 one Isaac Lab documents
   "$UV" pip install -q -U $TORCH_SPEC --index-url "$TORCH_INDEX"
-  "$UV" pip install -q imageio imageio-ffmpeg matplotlib tensorboard pyyaml pytest
+  "$UV" pip install -q imageio imageio-ffmpeg matplotlib tensorboard pyyaml pytest h5py
   PY=$WORK/venv/bin/python
   # Kit on aarch64 needs libgomp preloaded (it prints this exact fix otherwise)
   local gomp_torch

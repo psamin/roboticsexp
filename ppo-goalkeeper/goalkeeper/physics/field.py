@@ -20,8 +20,8 @@ PENALTY_X = 6.0
 
 # Goalkeeper: a Clearpath Jackal driving sideways along the goal line, with a blocking panel facing the kicker.
 KEEPER_X = 0.45              # base_link x in front of the goal line
-KEEPER_Y_LIMIT = 1.10        # soft travel limit of the base centre (panel stays clear of the posts)
-PANEL_HALF_WIDTH = 0.35      # half-width of the blocking panel along y
+KEEPER_Y_LIMIT = 1.08        # soft travel limit of the base centre (panel edge stays 4.8 cm inside the posts)
+PANEL_HALF_WIDTH = 0.372     # half-width of the blocking panel along y (0.70 m sheet + 2.2 cm frame each side)
 PANEL_OFFSET_X = 0.28        # panel front face, in front of base_link
 PANEL_FRONT_X = KEEPER_X + PANEL_OFFSET_X
 # Plane where the ball centre meets the panel; the interception point is predicted on this plane.
