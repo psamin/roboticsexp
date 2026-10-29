@@ -1,0 +1,37 @@
+# PPO goalkeeper training configuration. CLI flags in scripts/train.py override these.
+env:
+  num_envs: 1024
+  vmax: 2.0            # m/s, keeper top speed (Jackal rated speed)
+  amax: 6.0            # m/s^2, keeper acceleration limit
+  reward:
+    save: 10.0
+    goal: -10.0
+    progress: 1.0      # potential-based shaping toward the interception point (per metre)
+    action: 0.01       # penalty on a^2
+    jerk: 0.02         # penalty on (a - a_prev)^2
+  curriculum:
+    thresholds: [0.85, 0.85]   # on-target save rate needed to leave beginner, then intermediate
+    window: 2048               # episodes the rate is measured over
+
+ppo:
+  gamma: 0.99
+  lam: 0.95
+  clip: 0.2
+  lr: 3.0e-4
+  epochs: 4
+  num_minibatches: 4
+  ent_coef: 0.003
+  vf_coef: 0.5
+  max_grad_norm: 1.0
+  target_kl: 0.03
+  hidden: [128, 128]
+  init_std: 0.6
+
+train:
+  rollout_steps: 32          # per environment per update (32 x 1024 = 32768 samples)
+  budget_min: 60             # wall-clock budget for the training loop, including periodic evaluation
+  eval_every_min: 4
+  checkpoint_every_min: 5
+  seed: 1
+  selection_seed: 1000       # held-out shots used to pick the best checkpoint
+  test_seed: 2000            # separate held-out shots for the final report
