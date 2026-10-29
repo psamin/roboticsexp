@@ -8,9 +8,9 @@ H_APERTURE = 20.955   # mm, USD default
 
 PRESETS = {
     # behind the penalty mark, ball in the foreground, keeper centred in front of the goal
-    "hero": {"eye": (8.75, 0.42, 0.78), "target": (0.4, 0.0, 0.66), "focal": 19.0},
+    "hero": {"eye": (9.8, 0.55, 1.05), "target": (0.6, 0.0, 0.6), "focal": 25.0},
     # elevated, diagonal
-    "angle": {"eye": (5.6, -5.0, 3.1), "target": (0.3, 0.1, 0.55), "focal": 22.0},
+    "angle": {"eye": (8.2, -5.0, 2.6), "target": (2.8, 0.2, 0.4), "focal": 22.0},
     # playback views
     "front": {"eye": (9.4, 0.0, 1.35), "target": (1.0, 0.0, 0.55), "focal": 20.0},
     "side": {"eye": (3.2, -7.4, 1.6), "target": (2.4, 0.2, 0.4), "focal": 18.0},

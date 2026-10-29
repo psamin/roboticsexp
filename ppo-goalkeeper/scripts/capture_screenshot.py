@@ -23,6 +23,7 @@ parser.add_argument("--mode", choices=("pt", "rt"), default="pt")
 parser.add_argument("--spp", type=int, default=512)
 parser.add_argument("--views", default="hero,angle")
 parser.add_argument("--suffix", default="")
+parser.add_argument("--sky", choices=("puresky", "studio", "photo"), default="puresky")
 parser.add_argument("--asset_cache", default=os.environ.get("GK_ASSET_CACHE", "asset_cache"))
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
@@ -57,6 +58,7 @@ def main():
     cfg.scene.num_envs = 1
     cfg.asset_paths = paths
     cfg.render_scene = True
+    cfg.sky = args.sky
     cfg.level = 0
     cfg.kick_delay_s = 3600.0           # ball stays on the mark
     cfg.episode_length_s = 7200.0

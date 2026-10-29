@@ -117,7 +117,9 @@ def field_markings():
     return _merge(quad), _merge(tri)
 
 
-def build_field(stage, asset_paths: dict, origin=(0.0, 0.0, 0.0), sun: bool = True):
+def build_field(stage, asset_paths: dict, origin=(0.0, 0.0, 0.0), sky: str = "puresky"):
+    """sky: "puresky" (sky-only HDRI, field to the horizon), "studio" (plain grey dome + sun),
+    or "photo" (HDRI photographed on a real training pitch)."""
     grass = Path(asset_paths["grass_dir"])
     root = "/World/Field"
     UsdGeom.Xform.Define(stage, root)
@@ -130,7 +132,7 @@ def build_field(stage, asset_paths: dict, origin=(0.0, 0.0, 0.0), sun: bool = Tr
     for i in range(len(xs) - 1):
         v, f = _rect(xs[i], xs[i + 1], y0, y1)
         _mesh(stage, f"{root}/Stripe_{i:02d}", v, f, origin, light if i % 2 else dark)
-    big = 400.0
+    big = 3000.0
     for name, (a, b, c, d) in {"ApronN": (x0, x1, y1, big), "ApronS": (x0, x1, -big, y0),
                                "ApronE": (x1, big, -big, big), "ApronW": (-big, x0, -big, big)}.items():
         v, f = _rect(a, b, c, d)
@@ -140,10 +142,14 @@ def build_field(stage, asset_paths: dict, origin=(0.0, 0.0, 0.0), sun: bool = Tr
     _mesh(stage, f"{root}/Marks", tv, tf, origin, paint, z=0.003)
 
     dome = UsdLux.DomeLight.Define(stage, "/World/Sky")
-    dome.CreateIntensityAttr(1000.0)
-    dome.CreateTextureFileAttr(str(asset_paths["hdri"]))
-    dome.CreateTextureFormatAttr(UsdLux.Tokens.latlong)
-    if sun:
+    if sky == "studio":
+        dome.CreateIntensityAttr(900.0)
+        dome.CreateColorAttr(Gf.Vec3f(0.86, 0.88, 0.9))
+    else:
+        dome.CreateIntensityAttr(1000.0)
+        dome.CreateTextureFileAttr(str(asset_paths["hdri_puresky" if sky == "puresky" else "hdri"]))
+        dome.CreateTextureFormatAttr(UsdLux.Tokens.latlong)
+    if sky != "puresky":          # the pure-sky HDRI carries its own sun
         s = UsdLux.DistantLight.Define(stage, "/World/Sun")
         s.CreateIntensityAttr(1800.0)
         s.CreateAngleAttr(2.5)

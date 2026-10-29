@@ -31,6 +31,7 @@ BALL_FILES = {
 }
 GRASS_ZIP = "https://ambientcg.com/get?file=Grass005_2K-JPG.zip"
 HDRI = "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/8k/suburban_football_field_8k.hdr"
+PURESKY = "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/kloofendal_48d_partly_cloudy_puresky_4k.hdr"
 
 # Goal GLB (glTF, y-up) -> field frame. Measured from the mesh: post back faces at x=-0.045, ground at y=-0.04,
 # the posts' inner edges at z=-1.626 and 1.306 (2.932 m apart). Scale so the inside width is exactly 3.0 m.
@@ -64,6 +65,7 @@ def download(cache: Path, with_render_assets: bool = True):
                 if not (cache / "grass" / member).exists():
                     zf.extract(member, cache / "grass")
         _get(HDRI, cache / "sky" / Path(HDRI).name)
+        _get(PURESKY, cache / "sky" / Path(PURESKY).name)
     return cache
 
 
@@ -199,6 +201,25 @@ def build_ball(football_usdc: Path, out: Path, lin_damping=0.08, ang_damping=0.3
     vis.AddScaleOp().Set(Gf.Vec3f(s, s, s))
     vis.AddTranslateOp().Set(Gf.Vec3d(-0.15, 0.0, -0.11097))
     stage.OverridePrim("/Ball/Visual/football_deflated").SetActive(False)
+    # The source material mixes UsdPreviewSurface and MaterialX nodes and rendered untextured in RTX; bind a plain
+    # UsdPreviewSurface that samples the same Poly Haven colour map.
+    leather = UsdShade.Material.Define(stage, "/Ball/Looks/Leather")
+    pbr = UsdShade.Shader.Define(stage, "/Ball/Looks/Leather/PBR")
+    pbr.CreateIdAttr("UsdPreviewSurface")
+    st = UsdShade.Shader.Define(stage, "/Ball/Looks/Leather/st")
+    st.CreateIdAttr("UsdPrimvarReader_float2")
+    st.CreateInput("varname", Sdf.ValueTypeNames.Token).Set("st")
+    tex = UsdShade.Shader.Define(stage, "/Ball/Looks/Leather/Diffuse")
+    tex.CreateIdAttr("UsdUVTexture")
+    diff = Path(football_usdc).parent / "textures" / "football_diff_2k.jpg"
+    tex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(os.path.relpath(diff, out.parent))
+    tex.CreateInput("sourceColorSpace", Sdf.ValueTypeNames.Token).Set("sRGB")
+    tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(st.ConnectableAPI(), "result")
+    pbr.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(tex.ConnectableAPI(), "rgb")
+    pbr.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.42)
+    pbr.CreateInput("specular", Sdf.ValueTypeNames.Float).Set(0.35)
+    leather.CreateSurfaceOutput().ConnectToSource(pbr.ConnectableAPI(), "surface")
+    UsdShade.MaterialBindingAPI.Apply(vis.GetPrim()).Bind(leather, UsdShade.Tokens.strongerThanDescendants)
     stage.GetRootLayer().Save()
     return out
 
@@ -215,4 +236,5 @@ def build_all(cache: Path, out_dir: Path, with_render_assets: bool = True):
     if with_render_assets:
         paths["grass_dir"] = cache / "grass"
         paths["hdri"] = cache / "sky" / Path(HDRI).name
+        paths["hdri_puresky"] = cache / "sky" / Path(PURESKY).name
     return {k: str(v) for k, v in paths.items()}

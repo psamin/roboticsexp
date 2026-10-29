@@ -12,7 +12,10 @@ export GK_ASSET_CACHE=$HOME_DIR/ppo-goalkeeper-cache
 isaac_env
 cd "$PROJ"
 set +e
-run_py scripts/capture_screenshot.py --width ${WIDTH:-2560} --height ${HEIGHT:-1440} --spp ${SPP:-512} \
-    --mode ${MODE:-pt} --views ${VIEWS:-hero,angle} --suffix "${SUFFIX:-}" --out_dir "${OUT_DIR:-outputs/screenshots}" 2>&1 \
-  | grep --line-buffered -vE "^\s*$|\[Warning\]|\[Info\]|deprecated|UserWarning|warnings.warn|cuda capability|Minimum and Maximum|\(8.0\) - \(12.0\)"
-echo SHOT_EXIT=${PIPESTATUS[0]}
+for SKY in ${SKIES:-puresky}; do
+  run_py scripts/capture_screenshot.py --width ${WIDTH:-2560} --height ${HEIGHT:-1440} --spp ${SPP:-512} --sky $SKY \
+      --mode ${MODE:-pt} --views ${VIEWS:-hero,angle} --suffix "${SUFFIX:-}_$SKY" --out_dir "${OUT_DIR:-outputs/screenshots}" 2>&1 \
+    | grep --line-buffered -vE "^\s*$|\[Warning\]|\[Info\]|deprecated|UserWarning|warnings.warn|cuda capability|Minimum and Maximum|\(8.0\) - \(12.0\)"
+  echo SHOT_EXIT_$SKY=${PIPESTATUS[0]}
+done
+echo SHOT_EXIT=done
