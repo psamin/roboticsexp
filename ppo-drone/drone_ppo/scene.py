@@ -16,14 +16,32 @@ CAMERAS = {
 }
 
 
-def dress_scene(origin, floor_grey: float = 0.8):
+def dress_scene(origin, style: str = "isaac", floor_grey: float = 0.8):
+    """style: "isaac" (Isaac Lab's stock grid floor + neutral dome, as in the reference quadcopter demo),
+    "white" (white floor and backdrop), or "studio" (lit grey floor, darker grey backdrop)."""
     import omni.usd
 
     stage = omni.usd.get_context().get_stage()
+    if style in ("isaac", "white"):
+        if style == "white":
+            _floor(stage, origin, 0.95)
+        dome = UsdLux.DomeLight.Define(stage, "/World/Sky")
+        dome.CreateIntensityAttr(2000.0 if style == "isaac" else 2600.0)
+        dome.CreateColorAttr(Gf.Vec3f(0.75, 0.75, 0.75) if style == "isaac" else Gf.Vec3f(1.0, 1.0, 1.0))
+        key = UsdLux.DistantLight.Define(stage, "/World/Key")
+        key.CreateIntensityAttr(1500.0)
+        key.CreateAngleAttr(3.0)
+        UsdGeom.Xformable(key).AddRotateXYZOp().Set(Gf.Vec3f(30.0, 0.0, 140.0))
+        return TargetSphere(stage)
+    _floor(stage, origin, floor_grey)
+    return _studio_lights(stage)
+
+
+def _floor(stage, origin, grey):
     mat = UsdShade.Material.Define(stage, "/World/Looks/Floor")
     sh = UsdShade.Shader.Define(stage, "/World/Looks/Floor/PBR")
     sh.CreateIdAttr("UsdPreviewSurface")
-    sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(floor_grey, floor_grey, floor_grey))
+    sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(grey, grey, grey))
     # roughness 0 with no specular: RTX's rough-diffuse model darkens the far floor at grazing angles (measured:
     # roughness 0.9 -> far floor at 39 of 255 vs background 101; roughness 0 -> 102, a seamless horizon)
     sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.0)
@@ -40,6 +58,8 @@ def dress_scene(origin, floor_grey: float = 0.8):
     floor.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
     UsdShade.MaterialBindingAPI.Apply(floor.GetPrim()).Bind(mat)
 
+
+def _studio_lights(stage):
     dome = UsdLux.DomeLight.Define(stage, "/World/Sky")          # mid-grey backdrop, darker than the lit floor
     dome.CreateIntensityAttr(650.0)
     dome.CreateColorAttr(Gf.Vec3f(0.6, 0.61, 0.64))
@@ -58,7 +78,7 @@ def dress_scene(origin, floor_grey: float = 0.8):
 class TargetSphere:
     """One green sphere at environment 0's target. A plain prim (no instancer, no collider): visual only."""
 
-    def __init__(self, stage, radius: float = 0.025):
+    def __init__(self, stage, radius: float = 0.015):
         sphere = UsdGeom.Sphere.Define(stage, "/World/Target")
         sphere.CreateRadiusAttr(radius)
         mat = UsdShade.Material.Define(stage, "/World/Looks/Target")
@@ -109,7 +129,7 @@ def project(view, focal, width, height, p):
     return (u, v), (0 <= u < width and 0 <= v < height)
 
 
-def set_quality(mode="pt", spp_total=256, spp_frame=16):
+def set_quality(mode="pt", spp_total=256, spp_frame=16, auto_exposure=True):
     import carb
     s = carb.settings.get_settings()
     if mode == "pt":
@@ -120,7 +140,7 @@ def set_quality(mode="pt", spp_total=256, spp_frame=16):
         s.set("/rtx/pathtracing/adaptiveSampling/enabled", False)
     else:
         s.set("/rtx/rendermode", "RaytracedLighting")
-    s.set("/rtx/post/histogram/enabled", True)
+    s.set("/rtx/post/histogram/enabled", auto_exposure)
 
 
 class Grabber:

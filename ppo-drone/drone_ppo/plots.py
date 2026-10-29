@@ -44,8 +44,13 @@ def _csv(path):
 
 def training_curves(run_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    col = _csv(os.path.join(run_dir, "metrics.csv"))
+    col0 = _csv(os.path.join(run_dir, "metrics.csv"))
     ev = json.load(open(os.path.join(run_dir, "eval_history.json")))
+    # Each held-out evaluation resets all environments with randomised episode clocks, so the training episodes
+    # finishing in the next few updates are artificially short. Those updates are left out of the training curves.
+    after_eval = {e["iteration"] + k for e in ev for k in range(1, 4)}
+    keep = [int(i) not in after_eval for i in col0("iteration")]
+    col = lambda k: [v for v, ok in zip(col0(k), keep) if ok]
     t, et = col("wall_min"), [e["wall_min"] for e in ev]
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.6), dpi=150, facecolor=SURFACE)
     _style(axes[0], "Average episode reward (training episodes)")
@@ -64,7 +69,9 @@ def training_curves(run_dir, out_dir):
     axes[2].yaxis.set_major_formatter(PercentFormatter(1.0))
     for ax in axes[1:]:
         ax.legend(frameon=False, fontsize=9, labelcolor=INK2)
-    fig.tight_layout()
+    fig.text(0.01, 0.005, "Training-episode curves omit the 3 updates after each held-out evaluation (the evaluation "
+             "resets every environment, so the next episodes are cut short).", fontsize=8, color=INK2)
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
     p1 = os.path.join(out_dir, "training_curves.png")
     fig.savefig(p1, facecolor=SURFACE)
     plt.close(fig)

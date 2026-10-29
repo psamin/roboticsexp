@@ -52,7 +52,8 @@ class DroneHoverEnvCfg(DirectRLEnvCfg):
     stage: int = -1                  # fixed curriculum stage; -1 = automatic curriculum
     curriculum_thresholds: tuple = (0.8, 0.8)
     curriculum_window: int = 2048
-    render_scene: bool = False       # grey floor, green target sphere, lights (rendering only)
+    render_scene: bool = False       # floor, green target sphere, lights (rendering only)
+    scene_style: str = "isaac"       # "isaac" (stock grid floor), "white", or "studio"; see scene.dress_scene
 
 
 class DroneHoverEnv(DirectRLEnv):
@@ -100,14 +101,15 @@ class DroneHoverEnv(DirectRLEnv):
             import omni.usd
             from .scene import make_renderable
             make_renderable(omni.usd.get_context().get_stage(), "/World/envs/env_0/Robot")
-        ground = sim_utils.GroundPlaneCfg(physics_material=FLIGHT_MATERIAL, visible=not self.cfg.render_scene)
+        grid_visible = (not self.cfg.render_scene) or self.cfg.scene_style == "isaac"
+        ground = sim_utils.GroundPlaneCfg(physics_material=FLIGHT_MATERIAL, visible=grid_visible)
         ground.func("/World/ground", ground)
         self.scene.clone_environments(copy_from_source=False)
         if self.device == "cpu":
             self.scene.filter_collisions(global_prim_paths=["/World/ground"])
         if self.cfg.render_scene:
             from .scene import dress_scene
-            self.target_marker = dress_scene(self.scene.env_origins[0].tolist())
+            self.target_marker = dress_scene(self.scene.env_origins[0].tolist(), self.cfg.scene_style)
         else:
             light = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
             light.func("/World/Light", light)

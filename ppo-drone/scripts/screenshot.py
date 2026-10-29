@@ -23,6 +23,7 @@ p.add_argument("--mode", choices=("pt", "rt"), default="pt")
 p.add_argument("--spp", type=int, default=256)
 p.add_argument("--fly_s", type=float, default=5.0)
 p.add_argument("--dump_settings", action="store_true", help="print renderer settings related to fog/exposure")
+p.add_argument("--style", choices=("isaac", "white", "studio"), default="isaac")
 args, app = config.launch(p, cameras=True)
 
 
@@ -41,7 +42,7 @@ def main():
     if args.checkpoint:
         agent, extra = PPO.load(args.checkpoint, "cuda:0", load_optimizer=False)
         c = extra.get("config") or c
-    env = config.make_env(c, 1, stage=1, render_scene=True)
+    env = config.make_env(c, 1, stage=1, render_scene=True, scene_style=args.style)
     dev = env.device
     if agent is None:   # setup shot: drone just above the floor, target at the 1 m hover point (slightly offset)
         cond = {"stage": torch.zeros(1, dtype=torch.long, device=dev),
@@ -84,7 +85,7 @@ def main():
         cam = S.CAMERAS[cam_name]
     stage = omni.usd.get_context().get_stage()
     view = S.define_camera(stage, "/World/Cam", cam["eye"], cam["target"], cam["focal"], args.width, args.height, origin)
-    S.set_quality(args.mode, spp_total=args.spp)
+    S.set_quality(args.mode, spp_total=args.spp, auto_exposure=(args.style != "white"))
     if args.dump_settings:
         import carb
         def walk(d, path):

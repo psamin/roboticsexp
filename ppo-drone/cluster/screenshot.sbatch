@@ -11,5 +11,5 @@ source "${PROJ:-/nethome-instruction/pi34/roboticsexp/ppo-drone}/cluster/common.
 isaac_env
 cd "$PROJ"
 set +e
-run_py scripts/screenshot.py --out "$OUT_PNG" --camera ${CAMERA:-closeup} --spp ${SPP:-256} ${CKPT:+--checkpoint $CKPT} 2>&1 \
-  | grep -E "\[screenshot\]|SCREENSHOT|Traceback|Error|  File"
+for ST in ${STYLES:-isaac}; do run_py scripts/screenshot.py --out "${OUT_PNG%.png}_$ST.png" --style $ST --width ${WIDTH:-2560} --height ${HEIGHT:-1440} --camera ${CAMERA:-closeup} --spp ${SPP:-256} ${CKPT:+--checkpoint $CKPT} 2>&1 \
+  | grep -E "\[screenshot\]|SCREENSHOT|Traceback|Error|  File"; done
