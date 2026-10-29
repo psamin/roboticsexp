@@ -96,6 +96,10 @@ class DroneHoverEnv(DirectRLEnv):
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self.robot
+        if self.cfg.render_scene:
+            import omni.usd
+            from .scene import make_renderable
+            make_renderable(omni.usd.get_context().get_stage(), "/World/envs/env_0/Robot")
         ground = sim_utils.GroundPlaneCfg(physics_material=FLIGHT_MATERIAL, visible=not self.cfg.render_scene)
         ground.func("/World/ground", ground)
         self.scene.clone_environments(copy_from_source=False)
