@@ -68,9 +68,10 @@ class Trainer:
             json.dump(self.eval_history, f, indent=1)
 
     def log_iteration(self, stats, t_collect, t_total):
-        env, row = self.env, {"iteration": self.it, "steps": self.steps, "wall_min": self.wall() / 60,
-                              "sps_collect": self.N * self.T / t_collect, "sps": self.N * self.T / t_total, **stats,
-                              "stage": env.curriculum.stage, "stage_success_rate": env.curriculum.rate()[0]}
+        env = self.env
+        row = {"iteration": self.it, "steps": self.steps, "wall_min": self.wall() / 60,
+               "sps_collect": self.N * self.T / t_collect, "sps": self.N * self.T / t_total, **stats,
+               "stage": env.curriculum.stage, "stage_success_rate": env.curriculum.rate()[0]}
         ep = env.pop_completed()
         if ep is not None:
             row.update({"episodes": int(ep["success"].numel()), "ep_return": float(ep["return"].mean()),

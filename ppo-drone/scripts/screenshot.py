@@ -22,6 +22,7 @@ p.add_argument("--height", type=int, default=1440)
 p.add_argument("--mode", choices=("pt", "rt"), default="pt")
 p.add_argument("--spp", type=int, default=256)
 p.add_argument("--fly_s", type=float, default=5.0)
+p.add_argument("--dump_settings", action="store_true", help="print renderer settings related to fog/exposure")
 args, app = config.launch(p, cameras=True)
 
 
@@ -66,6 +67,15 @@ def main():
     stage = omni.usd.get_context().get_stage()
     view = S.define_camera(stage, "/World/Cam", cam["eye"], cam["target"], cam["focal"], args.width, args.height, origin)
     S.set_quality(args.mode, spp_total=args.spp)
+    if args.dump_settings:
+        import carb
+        def walk(d, path):
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    walk(v, f"{path}/{k}")
+            elif any(w in path.lower() for w in ("fog", "atmos", "vignet", "falloff", "horizon", "distance")):
+                print(f"[settings] {path} = {d}", flush=True)
+        walk(carb.settings.get_settings().get("/rtx"), "/rtx")
     grab = S.Grabber({"cam": "/World/Cam"}, args.width, args.height)
     for _ in range((args.spp // 16 + 40) if args.mode == "pt" else 120):
         env.sim.render()
