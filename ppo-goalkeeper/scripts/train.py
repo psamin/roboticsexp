@@ -120,6 +120,9 @@ def main():
     t_start = time.time()
     wall = lambda: prior_wall + time.time() - t_start
     last_eval = last_ck = time.time()
+    if not args.resume:
+        run_eval("initial")              # the untrained policy, so the curve starts at minute 0
+        last_eval = time.time()
     obs = env.reset()[0]["policy"]
     env.pop_completed()
     print(f"[train] {N} envs x {T} steps = {N*T} samples/iteration; budget {tr['budget_min']} min", flush=True)

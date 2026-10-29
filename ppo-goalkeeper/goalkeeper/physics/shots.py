@@ -25,8 +25,8 @@ class ShotLevel:
 
 LEVELS = (
     ShotLevel("beginner", (3.0, 4.0), 0.60, 0.00, (0.05, 0.05), 0.05, 0.00, 0.00, 0.0),
-    ShotLevel("intermediate", (3.5, 5.0), 1.00, 0.00, (0.10, 0.15), 0.25, 0.00, 0.00, 0.0),
-    ShotLevel("advanced", (4.0, 6.0), 1.35, 0.10, (0.15, 0.25), 0.50, 0.02, 0.10, 0.5),
+    ShotLevel("intermediate", (3.5, 5.5), 1.00, 0.00, (0.10, 0.15), 0.30, 0.00, 0.00, 0.0),
+    ShotLevel("advanced", (5.0, 8.0), 1.35, 0.10, (0.15, 0.25), 0.80, 0.02, 0.10, 0.5),
 )
 LEVEL_NAMES = tuple(lv.name for lv in LEVELS)
 OFF_TARGET_RANGE = (1.75, 2.30)      # |y| aim range for wide shots (posts' inner edge is at 1.5)
