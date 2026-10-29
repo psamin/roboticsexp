@@ -1,0 +1,41 @@
+{
+ "file": "/nethome/pi34/ppo-drone-results/run-12871/media/drone_ppo_trained_isaac.png",
+ "shape": [
+  1440,
+  2560,
+  3
+ ],
+ "mean": 152.04280246310765,
+ "std": 22.13284354322037,
+ "mode": "pt",
+ "spp": 384,
+ "camera": "closeup",
+ "policy": "ppo",
+ "distance_to_target_m": 0.1114653905208512,
+ "landmarks": {
+  "drone": {
+   "world": [
+    0.143,
+    0.055,
+    0.57
+   ],
+   "uv": [
+    1251,
+    335
+   ],
+   "in_frame": true
+  },
+  "target": {
+   "world": [
+    0.2,
+    0.12,
+    0.5
+   ],
+   "uv": [
+    1413,
+    467
+   ],
+   "in_frame": true
+  }
+ }
+}
