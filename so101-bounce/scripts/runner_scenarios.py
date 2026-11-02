@@ -184,9 +184,9 @@ SCENARIOS = {
     "hand false detections 10 %": ([(0.5, "hold", {"rel": (0, 0, 0.17), "visible": False}), (1.0, "free", {})],
                                    {"outlier_p": 0.10}, 7),
     "ball taken away, dropped again 0.3 s after": ([(0.5, "hold", {"rel": (0, 0, 0.17), "visible": False}),
-                                                    (1.0, "free", {}), (3.0, "remove", {}),
-                                                    (3.9, "hold", {"rel": (0, 0, 0.17), "visible": False}),
-                                                    (4.0, "free", {})], {}, 8),
+                                                    (1.0, "free", {}), (3.0, "remove", {}),       # runner gives up
+                                                    (4.2, "hold", {"rel": (0, 0, 0.17), "visible": False}),   # ~4.0 s
+                                                    (4.3, "free", {})], {}, 8.5),
     "static orange blob on the paddle, no ball": ([(0.5, "blob", {})], {}, 4),
 }
 
