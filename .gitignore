@@ -14,3 +14,9 @@ so101/drafts/
 *.jpg
 *.mp4
 *.safetensors
+
+# API keys: never committed. Put secrets in .env and load them from there.
+.env
+.env.*
+*.key
+.gstack/
