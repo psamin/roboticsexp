@@ -59,6 +59,22 @@ STARTS = {
     "tossed 0.3 m/s + spin 15": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.3, "spin": 15.0},
     "spin 30 rad/s, dropped centred": {"kind": "flight", "h": 0.15, "off": 0.0, "spin": 30.0},
     "bounced in (up 1.5 m/s)": {"kind": "flight", "h": 0.05, "off": 0.02, "vz": 1.5},
+    # round 14: the oracle's recoverable envelope (scripts/oracle_feasibility.py), direction relative to the offset
+    "toss 0.2 m/s toward centre": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.2, "vdir": "toward"},
+    "toss 0.3 m/s toward centre": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.3, "vdir": "toward"},
+    "toss 0.3 m/s toward centre, from 10 cm": {"kind": "flight", "h": 0.10, "off": 0.03, "vlat": 0.3, "vdir": "toward"},
+    "toss 0.3 m/s toward centre, from 30 cm": {"kind": "flight", "h": 0.30, "off": 0.03, "vlat": 0.3, "vdir": "toward"},
+    "toss 0.2 m/s sideways": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.2, "vdir": "side"},
+    "toss 0.3 m/s sideways": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.3, "vdir": "side"},
+    "toss 0.2 m/s away": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.2, "vdir": "away"},
+    "toss 0.1 m/s away + spin 15 top": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.1, "vdir": "away",
+                                        "spin": 15.0, "axis": "top"},
+    "drop 20 cm centred, spin 30 top": {"kind": "flight", "h": 0.20, "off": 0.0, "spin": 30.0, "axis": "top"},
+    "drop 20 cm centred, spin 30 side": {"kind": "flight", "h": 0.20, "off": 0.0, "spin": 30.0, "axis": "side"},
+    "toss 0.5 m/s toward centre + spin 30 top": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.5, "vdir": "toward",
+                                                 "spin": 30.0, "axis": "top"},
+    "toss 0.5 m/s sideways + spin 30 side": {"kind": "flight", "h": 0.20, "off": 0.03, "vlat": 0.5, "vdir": "side",
+                                             "spin": 30.0, "axis": "side"},
     "held 0.5 s visible": {**DROP15, "held": 0.5, "hidden": False},
     "held 1 s hidden": {**DROP15, "held": 1.0, "hidden": True},
 }
@@ -203,11 +219,21 @@ def set_start(env, ids, st):
         w = torch.zeros(n, 3, device=dev)
         rest = torch.ones(n, dtype=torch.bool, device=dev)
     else:
-        lat = st.get("off", 0.0) * _rand_dir2(env, n)
+        d_off = _rand_dir2(env, n)
+        lat = st.get("off", 0.0) * d_off
         p = env.home_env[ids] + torch.cat([lat, torch.full((n, 1), st["h"] + B.RADIUS, device=dev)], -1)
-        v = torch.cat([st.get("vlat", 0.0) * _rand_dir2(env, n), torch.full((n, 1), st.get("vz", 0.0), device=dev)], -1)
-        wd = env._n(n, 3)
-        w = st.get("spin", 0.0) * wd / wd.norm(dim=-1, keepdim=True)
+        vd = {"toward": -d_off, "away": d_off, "side": torch.stack([-d_off[:, 1], d_off[:, 0]], -1)}.get(
+            st.get("vdir"), None)
+        vd = _rand_dir2(env, n) if vd is None else vd
+        v = torch.cat([st.get("vlat", 0.0) * vd, torch.full((n, 1), st.get("vz", 0.0), device=dev)], -1)
+        if st.get("axis") == "side":                              # spin about the vertical
+            w = st.get("spin", 0.0) * torch.tensor([0.0, 0.0, 1.0], device=dev).expand(n, 3).clone()
+        elif st.get("axis") == "top":                             # horizontal, across the direction of travel
+            hz = torch.cat([-vd[:, 1:2], vd[:, 0:1], torch.zeros(n, 1, device=dev)], -1)
+            w = st.get("spin", 0.0) * hz
+        else:
+            wd = env._n(n, 3)
+            w = st.get("spin", 0.0) * wd / wd.norm(dim=-1, keepdim=True)
         rest = torch.zeros(n, dtype=torch.bool, device=dev)
     env.p_ball[ids], env.v_ball[ids], env.w_ball[ids], env.p_hold[ids] = p, v, w, p
     env.prev_vz[ids] = v[:, 2]

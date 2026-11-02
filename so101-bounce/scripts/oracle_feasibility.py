@@ -52,6 +52,14 @@ ENVELOPE = [
 ]
 
 
+ENVELOPE2 = [
+    ("toss 0.3 m/s toward centre, from 10 cm", dict(h=0.10, off=0.03, v=0.3, ang=180, vz=0.0, spin=0.0)),
+    ("toss 0.3 m/s toward centre, from 30 cm", dict(h=0.30, off=0.03, v=0.3, ang=180, vz=0.0, spin=0.0)),
+    ("toss 0.3 m/s sideways", dict(h=0.20, off=0.03, v=0.3, ang=90, vz=0.0, spin=0.0)),
+    ("toss 0.2 m/s away", dict(h=0.20, off=0.03, v=0.2, ang=0, vz=0.0, spin=0.0)),
+]
+
+
 def place(env, st):
     """Put every env's ball in the same start state (relative to its paddle centre at the hold pose)."""
     N, dev = env.N, env.device
@@ -107,7 +115,7 @@ def main():
     ap.add_argument("--iters", type=int, default=20)
     ap.add_argument("--horizon", type=float, default=1.5)
     ap.add_argument("--policy_eps", type=int, default=512)
-    ap.add_argument("--cases", default="main", choices=["main", "envelope"])
+    ap.add_argument("--cases", default="main", choices=["main", "envelope", "envelope2"])
     a = ap.parse_args()
     agent, extra = PPO.load(a.checkpoint, a.device, load_optimizer=False)
     tr = {k: tuple(v) if isinstance(v, list) else v for k, v in (extra.get("config") or {}).get("env", {}).items()
@@ -125,7 +133,7 @@ def main():
     s1 = rollout(det, torch.zeros(T, 8, 5, device=a.device))
     print(f"determinism check (8 identical zero-action rollouts): survived {s1[0].tolist()}")
     print(f"\n{'start':42s} {'oracle':>7} {'surv s':>6} {'bounces':>7} {'end off':>7} {'pop ok':>6}  {'policy':>6}")
-    for name, st in (CASES if a.cases == "main" else ENVELOPE):
+    for name, st in {"main": CASES, "envelope": ENVELOPE, "envelope2": ENVELOPE2}[a.cases]:
         env = make_env(cfg, a.pop)
         mu = torch.zeros(knots, 5, device=a.device)
         sd = torch.full((knots, 5), 0.6, device=a.device)

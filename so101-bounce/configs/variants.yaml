@@ -420,3 +420,29 @@ v20_p32_flick:
     launch_steer: true
     launch_max_action: 2.0
     paddle_box: [0.12, 0.10]
+# Round 14 (2026-11-02): "bouncing from any angle": train the starts the oracle found recoverable but v16-p32-lo misses:
+# tosses aimed at the paddle (toward the centre or sideways) at up to 0.3 m/s (6 cm box) or 0.5 m/s (10 cm box, which the
+# oracle needs for 0.5 m/s), spin up to 30 rad/s (tosses include near-zero speed, i.e. spinning centred drops), and hand
+# taps at 0-1 Hz. In v16 the toss speed and spin scaled with a task level stuck near 0.1, so tosses were ~0.15 m/s and
+# ~7 rad/s; toss_full_p draws the full range instead. From v16-p32-lo.
+v21_p32_any6:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    toss_p: 0.6
+    toss_vlat: 0.3
+    toss_spin: 30.0
+    toss_full_p: 0.8
+    push_full_p: 0.5
+v21_p32_any10:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    toss_p: 0.6
+    toss_vlat: 0.5
+    toss_spin: 30.0
+    toss_full_p: 0.8
+    push_full_p: 0.5
+    paddle_box: [0.12, 0.10]

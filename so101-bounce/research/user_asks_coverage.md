@@ -149,3 +149,46 @@ suite).
 The runner's `--auto-level` applied no trim in camera mode until 2026-11-02: frames arrive about 62 ms after capture
 and the update required a detection under 50 ms old. It now updates once per new detection, as the simulator does
 (fake-bus check: resting 3 cm off centre, trim +1.65 deg flex, 21 bounces).
+
+## Round 14 (2026-11-02): starts the oracle can recover but the policy misses ("bouncing from any angle")
+
+Recoverable (oracle) starts where v16-p32-lo + auto-level survives under 90 % (12v_r10, 9 cm, 1024 episodes, 8 s,
+difficulty 0; toss offset 3 cm, direction relative to the offset):
+
+| Start | Oracle | v16-p32-lo + AL |
+|---|---|---|
+| toss 0.3 m/s toward centre, from 20 cm / 30 cm | yes / yes | 61 / 52 % |
+| toss 0.2 / 0.3 m/s sideways | yes / yes | 89 / 45 % |
+| toss 0.2 m/s away; 0.1 m/s away + topspin 15 rad/s | yes / yes | 75 / 73 % |
+| centred drop from 20 cm, topspin 30 rad/s | yes | 49 % |
+| toss 0.5 m/s toward centre or sideways + spin 30 | only with a 10 cm box | 0 % |
+| hand taps every second | each tap yes | 24 % |
+
+(Toward centre 0.2 m/s, 94 %; from 10 cm, 91 %; sidespin centred drop, 100 %.)
+
+Fine-tunes from v16-p32-lo (70 min) with those starts in training: aimed tosses up to 0.3 m/s (any6, 6 cm box) or
+0.5 m/s (any10, 10 cm box), spin up to 30 rad/s, full range in 80 % of tosses (toss_full_p; in v16 the toss speed and
+spin scaled with a task level stuck near 0.1), and hand taps 0-1 Hz in half the episodes. Change in survival vs
+v16-p32-lo + auto-level (points, 95 % interval of the difference; * = beyond it):
+
+| Row | d | any6 | any10 | v19-p32-tilt |
+|---|---|---|---|---|
+| toss 0.3 toward centre | 0 | +11 +-4 * | -1 | -16 * |
+| toss 0.3 toward centre, 30 cm | 0 | -1 | +10 +-4 * | +8 * |
+| toss 0.2 / 0.3 sideways | 0 | 0 / +5 * | +5 * / +2 | +7 * / -4 |
+| topspin centred drop; 0.5 m/s spinning tosses; taps 1 Hz | 0 | +1; 0; +1 | +2; 0; +1 | -3; 0; -2 |
+| drop 40 cm | 0 / 0.5 | -6 * / -1 | +9 * / -5 * | +16 * / +6 * |
+| paddle 2 deg (no launch) / 3 deg | 0.5 | 0 / -3 * | -1 / -3 * | -3 / -2 |
+| paddle 2 deg (no launch) | 0 | -5 * | 0 | +1 |
+| 15 fps dim | 0 / 0.5 | -3 * / -5 * | -2 / -3 | -1 / -6 * |
+| rest + launch, rolling + launch, dead paddle + launch | 0.5 | -1 to -4 | +6 to +8 * | -3 to +1 |
+| camera latency 150 ms; depth scale +10 % | 0 | 0; -2 | +7 *; -5 * | -15 *; -5 * |
+
+The gap to the oracle mostly stays: the largest gain on a recoverable start is +11 points, spinning 0.5 m/s tosses stay
+at 0 even with the 10 cm box, topspin drops at ~50 % and taps at ~25 %. Every fine-tune also regresses some round-10
+rows beyond the interval (any6: 40 cm drops, 2 deg tilt, 15 fps; any10: 40 cm drops and 3 deg tilt at difficulty 0.5;
+v19-p32-tilt: camera latency, 15 fps).
+
+**Deploy stays** `policies/v16-p32-lo.pt --launch --target-cm 9 --auto-level`. Runner-up: `policies/v21-p32-any10.pt`
+(same flags): no regression on the round-10 rows at difficulty 0, +6 to +8 on launched / dead-paddle starts at 0.5, but
+-5 on 40 cm drops and -3 at 3 deg tilt at 0.5.
