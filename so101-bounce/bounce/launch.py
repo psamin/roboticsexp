@@ -59,6 +59,13 @@ NAMED = {
                   settle_steps=2, gain=1.56, steer_p=0.82, steer_v=0.26),
     "r12_deep": Launch(dip=(-0.298, -0.597, -0.802), dip_steps=4, strike=(-0.286, 0.199, 0.737), strike_steps=5,
                        settle_steps=2, gain=1.94, steer_p=2.36, steer_v=0.86),
+    # Round 13b: a hard flick with a 3-step return stroke that brings the paddle back toward home before the hand-off
+    # (scripts/tune_launch_high.py --start r12,r12_deep --ret, job 13393 stage 2; 128 starts per group, dead paddles
+    # e 0.55-0.75, rolling to 0.3 m/s, up to 2 deg tilt). d = 0: first apex 11.4 / 11.2 / 10.8 cm (centre / half-way /
+    # rim), ball alive to it 99-100 %, drift 3.8 / 4.9 / 7.7 cm, paddle 0.8-1.8 cm above home at the apex (r12 3-4 cm,
+    # r10 0-0.2 cm with a 10 cm apex and only 41 % alive from the rim). d = 0.5: 11.7-13.2 cm, alive 97-100 %.
+    "r13": Launch(dip=(-0.469, -0.467, -1.1), dip_steps=3, strike=(-0.043, 0.397, 0.107), strike_steps=5,
+                  settle_steps=2, gain=2.0, steer_p=1.95, steer_v=0.88, ret=(-0.198, 0.256, 0.357), ret_steps=3),
 }
 
 

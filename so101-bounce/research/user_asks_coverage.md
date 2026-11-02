@@ -102,3 +102,50 @@ full 8 s; beside 10 cm dropped after 2.6 s. Alternatives: `v17-p32-reach.pt` (eq
 better beside the paddle, worse with joint calibration error; rehearsal 4/4), `v16-p32-wide.pt` /
 `v17-wide-cont.pt` (widest servo range, in case the real arm is faster than `12v_r10`), `v17-p32-cal.pt` (if the joint
 calibration is known to be off by ~2 deg).
+
+## Round 13 (2026-11-02): auto-level, feasibility, and a harder flick
+
+**Auto-level** (the runner's `--auto-level`, ported exactly into the simulator as `EnvCfg.auto_level`): an average of
+where on the blade the ball sits slowly trims the hold command's wrist against it. 12v_r10, 9 cm, 1024 episodes per
+row, 95 % intervals about +-3 points. Survival %:
+
+| Scenario | v16-p32-lo | + auto-level | v18-p32-t12 | + auto-level |
+|---|---|---|---|---|
+| paddle 0 / 1 deg off level | 100 / 95 | 100 / 96 | 100 / 96 | 100 / 96 |
+| paddle 2 deg (no launch / launch) | 52 / 51 | 68 / 65 | 65 | 75 |
+| paddle 3 deg (no launch / launch) | 21 / 23 | 33 / 30 | 22 | 37 |
+| joint calibration 2 deg | 47 | 52 | 54 | 56 |
+| rolling 0.2 m/s, dead paddle, drops, rest | unchanged | unchanged | unchanged | unchanged |
+
+Gain (face-normal change per second per metre of drift): 0.25 and 0.5 are equal, 1.0 is a few points better at 2-3 deg
+and a few worse on level and rolling starts, 2.0 is harmful (rest centre 58 %). Keep 0.5 (the runner's value).
+
+Fine-tunes from v16-p32-lo (70 min, invisible tilt up to 3 deg and joint calibration error in half the episodes):
+`v19-p32-tilt` (auto-level off in training) with auto-level at run time matches v16-p32-lo + auto-level on tilt (2 deg
+69 / 65, 3 deg 34 / 25, joint calibration 55) and is better from 40 cm (99 vs 85 %); `v19-p32-al` (auto-level on in
+training) is worse (2 deg 58 / 59, joint calibration 36). Training does not add much over the run-time trim.
+
+**What is physically possible** (an oracle: cross-entropy search over open-loop arm commands from the exact start, with
+the simulator's exact physics and no camera; 4096 x 20; success = alive 1.5 s, 3+ bounces, back within 4 cm):
+- single hand taps (up to 0.3 m/s sideways or 0.9 m/s up or down, at the apex): recoverable; the policies already
+  survive them (98-100 % over 1.5 s). Taps every second fail by accumulation (about 15 % per tap), not physics.
+- tosses landing away from the centre at 0.3-0.5 m/s (from 20 cm, 3 cm off): never recoverable, at any spin.
+- tosses up to 0.2-0.3 m/s toward the centre or sideways, and spin up to 30 rad/s on a centred drop: recoverable
+  (policy 2-100 %: a learnable gap). 0.5 m/s toward the centre or sideways with spin is recoverable only with the
+  paddle allowed 10 cm up (v18's box), not within v16's 6 cm. Training tosses are aimed at the paddle (within 4 cm of
+  the centre), so they stay inside this envelope; the scenario test's random-direction toss rows include
+  impossible cases.
+
+**A harder flick** (`r13` in `bounce/launch.py`: r12 / r12_deep retuned with a return stroke that brings the paddle
+back toward home before the hand-off): first bounce 11-13 cm, the ball reaches it 97-100 % of the time, but it drifts
+4-8 cm, and the paddle tops out near 0.9-1 m/s on this torque-capped arm. `v20-p32-flick` trained on the catch after it
+(70 % of launches, 60-105 % strength): with r13 it survives 0-35 % (dropped); with the round-10 launch 100 %, same as
+v16-p32-lo (0.28-0.68 s to the first steady bounce). A harder flick does not beat the round-10 launch here.
+
+**Deploy:** `policies/v16-p32-lo.pt --launch --target-cm 9 --auto-level` (gain 0.5). `policies/v19-p32-tilt.pt` with
+the same flags is an alternative (equal on tilt with auto-level, better on 40 cm drops; not yet run through the full
+suite).
+
+The runner's `--auto-level` applied no trim in camera mode until 2026-11-02: frames arrive about 62 ms after capture
+and the update required a detection under 50 ms old. It now updates once per new detection, as the simulator does
+(fake-bus check: resting 3 cm off centre, trim +1.65 deg flex, 21 bounces).

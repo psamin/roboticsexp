@@ -88,6 +88,7 @@ DRIFT_W = [2.0]
 APEX = [0.15, 0.20]                                         # good first apex (m); --apex overrides
 PAD_W = [0.0]                                               # score weight on the paddle's height above home at the apex
 RET = [False]                                               # search a return stroke (Launch.ret / ret_steps)
+RANK_OK = [False]                                           # rank candidates by their share of good launches first
 
 
 def score(apex, drift, alive, padz=None):
@@ -140,6 +141,8 @@ def evaluate(params, reps, servo, p_gain, seed, J, groups=GROUPS, difficulty=0.0
     ok = torch.stack([score(a, d, al, pz)[0].float().view(len(params), reps).mean(1)
                       for a, d, al, _, pz in res.values()]).mean(0)
     val = torch.stack([score(a, d, al, pz)[1].view(len(params), reps).mean(1) for a, d, al, _, pz in res.values()]).mean(0)
+    if RANK_OK[0]:
+        val = ok + 0.1 * val
     return ok, val, res
 
 
@@ -158,8 +161,9 @@ def main():
                     "first apex (a return stroke brings it down before the hand-off)")
     ap.add_argument("--ret", action="store_true", help="search a return stroke after the strike")
     ap.add_argument("--start", default="", help="comma-separated NAMED launches to search around (local search only)")
+    ap.add_argument("--rank_ok", action="store_true", help="rank by the share of good launches, score as tie-break")
     a = ap.parse_args()
-    DIP_MIN[0], DRIFT_W[0], PAD_W[0], RET[0] = a.dip_min, a.drift_w, a.pad_w, a.ret
+    DIP_MIN[0], DRIFT_W[0], PAD_W[0], RET[0], RANK_OK[0] = a.dip_min, a.drift_w, a.pad_w, a.ret, a.rank_ok
     APEX[:] = [float(x) for x in a.apex.split(",")]
     K = dict(reps1=2, top=48, reps2=12, local=96, reps3=16, final=256) if not a.quick else \
         dict(reps1=1, top=4, reps2=2, local=4, reps3=2, final=8)

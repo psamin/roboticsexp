@@ -191,6 +191,7 @@ def main():
         print(f"holding: sag trimmed {max(abs(cmd[n] - hold[n]) for n in A.ARM):.1f} deg; model says the paddle is "
               f"tilted {tilt:.1f} deg (level by hand = joint map OK if this is small)")
         trim, drift, t_trim = np.zeros(5), np.zeros(2), 0.0      # --auto-level: wrist trim and the ball's mean drift
+        t_det = -1.0                                              # capture time of the last detection folded in
 
         def new_obs():
             return RealObs(kin, q_ref + trim, home, a.target_cm / 100, cfg.history, cfg.cam_k, side_camera=False)
@@ -295,7 +296,8 @@ def main():
                     f = float(np.clip((now - t_active - a.target_hold_s) / max(a.target_ramp_s, 1e-3), 0.0, 1.0))
                     ro.target = (a.target_start_cm + f * (a.target_cm - a.target_start_cm)) / 100
                 act = launch_q.pop(0) if launch_q else agent.act_deterministic(ro.vector(now))[0].numpy()
-                if a.auto_level and ro.det and now - ro.det[-1][0] < 0.05:
+                if a.auto_level and ro.det and ro.det[-1][0] != t_det:   # once per new detection (frames arrive
+                    t_det = ro.det[-1][0]                                # ~62 ms after capture)
                     off = (ro.det[-1][1][:2] - fk["paddle_o"][0, :2]).numpy()
                     if np.hypot(*off) < 0.08:                          # where on the blade the ball sits, smoothed ~1 s
                         drift = 0.97 * drift + 0.03 * off
