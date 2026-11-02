@@ -2,7 +2,7 @@
 bus (as in real/rehearse.py) and a fake camera watching a simulated ball that a scripted hand places, holds, drops
 or takes away. Checks the runner's start / lost / re-arm logic in the cases the simulator cannot express.
 
-  uv run python scripts/runner_scenarios.py policies/v12-base.pt [scenario ...]
+  uv run python scripts/runner_scenarios.py policies/v12-base.pt [scenario ...] [-- runner flags, e.g. --launch]
 
 Each scenario runs in real time (~6-9 s after a 3 s settle). Reported per scenario: when the policy switched on
 relative to the ball becoming free, how many bounces the ball made while the policy ran, runner "lost" calls made
@@ -28,6 +28,8 @@ from bounce import ball as B                               # noqa: E402
 from bounce.ppo import PPO                                 # noqa: E402
 
 CAM = np.array([-0.17, 0.0, 0.94])                         # camera position for the depth-error direction
+LAT = rig.CONFIG.get("camera_latency_s", 0.035)            # measured camera latency; the runner assumes it too
+FLAGS = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 
 
 class DelayBus(SimBus):
@@ -52,7 +54,7 @@ class DelayBus(SimBus):
 class World:
     """Ball + scripted hand + camera. Phases (time after Enter, action, params) are applied in order."""
 
-    def __init__(self, env, phases, fps=30.0, lat_true=0.035, depth_sd=0.0, perp_sd=0.002, drop_p=0.0,
+    def __init__(self, env, phases, fps=30.0, lat_true=LAT, depth_sd=0.0, perp_sd=0.002, drop_p=0.0,
                  outlier_p=0.0, seed=0):
         self.env, self.phases = env, sorted(phases, key=lambda x: x[0])
         self.fps, self.lat_true, self.depth_sd, self.perp_sd = fps, lat_true, depth_sd, perp_sd
@@ -177,7 +179,7 @@ SCENARIOS = {
     "0.7 s detection gap in play": ([(0.5, "hold", {"rel": (0, 0, 0.17), "visible": False}), (1.0, "free", {}),
                                      (3.0, "gap", {"s": 0.7})], {}, 7),
     "15 fps camera": ([(0.5, "hold", {"rel": (0, 0, 0.17), "visible": False}), (1.0, "free", {})], {"fps": 15.0}, 7),
-    "true latency 100 ms (runner assumes 35)": ([(0.5, "hold", {"rel": (0, 0, 0.17), "visible": False}),
+    "true latency 100 ms (runner assumes config)": ([(0.5, "hold", {"rel": (0, 0, 0.17), "visible": False}),
                                                 (1.0, "free", {})], {"lat_true": 0.100}, 7),
     "hand false detections 10 %": ([(0.5, "hold", {"rel": (0, 0, 0.17), "visible": False}), (1.0, "free", {})],
                                    {"outlier_p": 0.10}, 7),
@@ -210,7 +212,7 @@ def run(name, ck, env, hold):
             if f is None:
                 return (world.last if hasattr(world, "last") else None), getattr(world, "last_t", now), world.n
             avail, cap, pos = f
-            world.last, world.last_t = ("det", pos), T["enter"] + avail - 0.035   # runner: read time - 35 ms
+            world.last, world.last_t = ("det", pos), T["enter"] + avail - LAT   # runner: read time - latency
             return world.last, world.last_t, world.n
 
         def close(self):
@@ -236,7 +238,7 @@ def run(name, ck, env, hold):
     R.Camera, R.BallFinder, R.CameraModel = Cam, Finder, Model
     R.camera_index = lambda cc: 0                          # no real camera in the harness
     builtins.input = fake_input
-    sys.argv = ["bounce_run", "--checkpoint", ck]
+    sys.argv = ["bounce_run", "--checkpoint", ck, *FLAGS]
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         R.main()
@@ -259,7 +261,7 @@ def run(name, ck, env, hold):
 
 def main():
     ck = sys.argv[1]
-    names = sys.argv[2:] or list(SCENARIOS)
+    names = [n for n in sys.argv[2:sys.argv.index("--") if "--" in sys.argv else None]] or list(SCENARIOS)
     ecfg = (PPO.load(ck, "cpu", load_optimizer=False)[1].get("config") or {}).get("env", {})
     kw = {k: tuple(v) if isinstance(v, list) else v for k, v in ecfg.items() if k in EnvCfg.__dataclass_fields__}
     env = BounceEnv(EnvCfg(**{**kw, "num_envs": 1, "device": "cpu", "servo_variant": "12v"}))   # the real arm

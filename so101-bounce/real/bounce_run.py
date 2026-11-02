@@ -203,7 +203,8 @@ def main():
         input("Enter to arm" + (" (simulated ball)" if a.virtual_ball else "; then put the ball on the paddle whenever "
               "you like. It keeps running and re-arms after every drop; Ctrl-C to stop") + " ... ")
         if a.virtual_ball:
-            vb = VirtualBall(fk0, start=a.virtual_start, e0=a.virtual_e, tilt_deg=a.virtual_tilt_deg)
+            vb = VirtualBall(fk0, latency=CONFIG.get("camera_latency_s", 0.035), start=a.virtual_start, e0=a.virtual_e,
+                             tilt_deg=a.virtual_tilt_deg)
             state = "active"
             if launch and a.virtual_start == "rest":
                 launch_q = list(launch)
