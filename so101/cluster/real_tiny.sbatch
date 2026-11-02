@@ -34,12 +34,14 @@ echo "job $SLURM_JOB_ID on $(hostname) robotfpga $(git rev-parse --short HEAD) d
 cp "$DATA/norm.json" "$OUT/norm.json"
 run() { echo "+ $*"; "$UV" run python -m "$@"; }
 
-run armlab.policy.train --data "$DATA" --out "$OUT/float" --steps "$STEPS" --val-episodes "$VAL" --ckpt-every "$STEPS"
-FLOAT=$(ls -t "$OUT"/float/*.pt | head -1)
-run armlab.policy.qat_train --data "$DATA" --float-ckpt "$FLOAT" --out "$OUT/qat" --steps "$QAT_STEPS" --val-episodes "$VAL"
+if [ -z "${SKIP_TRAIN:-}" ]; then   # SKIP_TRAIN=1 reuses $OUT/qat/export and only redoes vectors + HLS
+  run armlab.policy.train --data "$DATA" --out "$OUT/float" --steps "$STEPS" --val-episodes "$VAL" --ckpt-every "$STEPS"
+  FLOAT=$(ls -t "$OUT"/float/*.pt | head -1)
+  run armlab.policy.qat_train --data "$DATA" --float-ckpt "$FLOAT" --out "$OUT/qat" --steps "$QAT_STEPS" --val-episodes "$VAL"
+fi
 
 # Golden vectors from real frames, then the HLS C model must match them bit for bit.
-"$UV" run python scripts/pack_frames.py --data "$DATA" --out "$OUT/packets.npy" --n 80
+"$UV" run python scripts/pack_frames.py --data "$DATA" --out "$OUT/packets.npy" --n 80 --per-episode 8   # vectors.py needs >= 58 real frames; 13 episodes x 8
 rm -rf "$OUT/handoff" && cp -r "$OUT/qat/export" "$OUT/handoff"
 "$UV" run python ref/vectors.py --model "$OUT/handoff" --packets "$OUT/packets.npy"
 make -s -C hls csim ART="$OUT/handoff" | tee "$OUT/hls_csim.txt"

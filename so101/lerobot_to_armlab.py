@@ -3,8 +3,8 @@
     python lerobot_to_armlab.py --repo-id flyingturtleboop/so101_medicine_bottle_pickplace \
         --out <dir> --exclude 11 14 --val 2
 
-Writes <dir>/shard_000.npz with the keys armlab.policy.data.DemoSet reads (image, state, instr,
-action, lengths, meta) and <dir>/norm.json, which a controller needs to map policy outputs back to
+Writes <dir>/shard_000.npz with the keys armlab reads (image, state, instr, action, executed,
+lengths, meta) and <dir>/norm.json, which a controller needs to map policy outputs back to
 LeRobot joint values.
 
 - image: the `front` (C920, top) camera, full frame resized to 96x96 RGB uint8 (spec §5.1).
@@ -80,6 +80,7 @@ def main():
         state=norm(state[sel]),
         instr=np.zeros(len(sel), np.int64),
         action=norm(action[sel]),
+        executed=norm(action[sel]),  # armlab replay/pack_frames read it; for teleop demos it is the action
         lengths=np.array([len(r) for r in rows], np.int32),
         meta=np.array(json.dumps([{"source": args.repo_id, "episode": int(e), "task": task, "success": True}
                                   for e in order])),

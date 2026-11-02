@@ -30,6 +30,10 @@ scripts run against is `~/Documents/GitHub/lerobot` (commit `e624f3f7`), environ
 | `cluster/train_smolvla.sbatch` | Fine-tune SmolVLA on a dataset (H200). |
 | `cluster/serve_policy.sbatch` | Serve a trained policy on the H200, localhost-only, for `policy.sh`. |
 | `test_policy_server.py` | Check a running server end to end with a recorded frame, without moving the arm. |
+| `dream_run.py` | Dream Labs' Dream-1 on this arm, run from `~/dream-env`: the base model zero-shot, or a fine-tune with `--checkpoint dream-1-ft:...`. Dry run by default (reads the arm and cameras, logs what it would send); `--live` drives the arm and glides back to its start pose at the end. |
+| `camera_check.py` | Your two cameras as Dream-1 sees them in a zero-shot run, beside the YAM station's views (rendered from Dream's simulator at the station's calibrated camera pose). Writes `logs/camera-check.jpg`. |
+| `yam_sim_fast.py` | Dream's YAM simulator (`dreamcli example yam-mujoco`) with the cameras rendered only on the steps the model gets frames from: on this Mac the full render overran every 50 ms step (83 ms), so the stock example runs at about 60% speed. Same commands as the stock example. |
+| `lerobot_to_dream.py` | Convert a recorded LeRobot v3.0 dataset to the v2.1 layout Dream's fine-tuning takes (one file per episode, cameras center-cropped to 16:9 from the sensor's own frame). Uploaded so far: `ds_96e0c41c8d514897` (13 episodes of the bottle task) under the embodiment `praneeths14209/so101-single-arm`. |
 
 `~/so101` is a symlink to this folder.
 
