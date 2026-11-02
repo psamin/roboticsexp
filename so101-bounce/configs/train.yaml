@@ -1,0 +1,29 @@
+# SO-101 ping-pong bouncing: default training run. Any key can be overridden with --set key=value
+# (e.g. --set env.p_gain=32 --set ppo.lr=1e-4) or by a variant in configs/variants.yaml.
+env:
+  num_envs: 16384
+  ctrl_hz: 50.0
+  substeps: 10
+  episode_s: 8.0
+  p_gain: 16.0
+  difficulty: 0.0            # randomisation level at the start; raised automatically while episodes survive
+ppo:
+  gamma: 0.99
+  lam: 0.95
+  clip: 0.2
+  lr: 3.0e-4
+  epochs: 5
+  num_minibatches: 4
+  vf_coef: 1.0
+  max_grad_norm: 1.0
+  adaptive_lr: true
+  desired_kl: 0.01
+  hidden: [256, 256, 128]
+  init_std: 0.4
+train:
+  rollout_steps: 32
+  budget_min: 60
+  eval_every_min: 10
+  checkpoint_every_min: 3
+  eval_seed: 2000
+  seed: 0

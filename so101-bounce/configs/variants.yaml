@@ -1,0 +1,422 @@
+# Variants merged over configs/train.yaml. Run with: python scripts/train.py --variant <name> --out ...
+base: {}
+# Feetech factory P gain (LeRobot writes 16): roughly doubles servo bandwidth; deploy only if sysid shows no oscillation
+p32:
+  env:
+    p_gain: 32.0
+# Policy at 30 Hz (the C920's rate and the rate LeRobot loops are known to sustain)
+hz30:
+  env:
+    ctrl_hz: 30.0
+    substeps: 16
+# Bigger network: 4x the parameters (still ~0.1 ms per decision on the Mac CPU)
+big:
+  ppo:
+    hidden: [512, 512, 256]
+# Longer memory: 12 control steps of joints/actions and 12 ball detections (helps infer delays and servo strength)
+hist12:
+  env:
+    history: 12
+    cam_k: 12
+# Stiffer servo and 30 Hz together (both helped separately in round 3)
+p32_hz30:
+  env:
+    p_gain: 32.0
+    ctrl_hz: 30.0
+    substeps: 16
+# The user's arm: 12 V servos fitted to the real arm (bounce/servo.py SERVO_RANGES_12V), fitted command delay,
+# overhead camera only (no side camera yet)
+v12:
+  env:
+    servo_variant: "12v"
+    act_delay_ms: [30.0, 8.0, 40.0]
+    side_cam_prob: 0.0
+v12_p32:
+  env:
+    servo_variant: "12v"
+    act_delay_ms: [30.0, 8.0, 40.0]
+    side_cam_prob: 0.0
+    p_gain: 32.0
+# Round 7: v12 plus every start and setup case research/scenarios_and_failures.md found missing: held-then-released
+# balls, starts beside the paddle, drops up to 40 cm (ceiling only after landing), the overhead camera anywhere from
+# behind the base to in front of the paddle at 0.7-1.3 m, paddle up to 2 deg off level, larger timestamp and depth
+# errors, camera latency up to 150 ms, resting starts out to 90 % of the blade
+v13:
+  env:
+    servo_variant: "12v"
+    act_delay_ms: [30.0, 8.0, 40.0]
+    side_cam_prob: 0.0
+    held_start_prob: 0.15
+    beside_start_prob: 0.15
+    flight_h: [0.03, 0.40]
+    ceiling_after_land: true
+    overhead_cam_box: [[-0.25, -0.20, 0.70], [0.45, 0.20, 1.30]]
+    level_error: 0.035
+    age_bias: 0.06
+    depth_scale: 0.05
+    cam_base_ms: [20.0, 8.0, 80.0]
+    cam_lat_max: 0.15
+    rest_spread: 0.9
+v13_p32:
+  env:
+    servo_variant: "12v"
+    act_delay_ms: [30.0, 8.0, 40.0]
+    side_cam_prob: 0.0
+    held_start_prob: 0.15
+    beside_start_prob: 0.15
+    flight_h: [0.03, 0.40]
+    ceiling_after_land: true
+    overhead_cam_box: [[-0.25, -0.20, 0.70], [0.45, 0.20, 1.30]]
+    level_error: 0.035
+    age_bias: 0.06
+    depth_scale: 0.05
+    cam_base_ms: [20.0, 8.0, 80.0]
+    cam_lat_max: 0.15
+    rest_spread: 0.9
+    p_gain: 32.0
+# Round 8: v13 plus start-up variation as the real runner switches the policy on: arm not yet settled (paddle
+# +-3 cm, +-3 deg, joints still moving up to 0.5 rad/s), the policy's first action up to 0.25 s after the ball
+# starts (arm held still meanwhile), ball already mid-bounce, non-zero start history; camera nominal at the
+# calibrated mount (half the episodes; the rest anywhere in the v13 box), latency nominal ~65 ms (measured 62 ms);
+# dead stops anywhere on the blade, half of them rolling (up to 0.3 m/s) on a paddle up to 3 deg off level;
+# tosses (up to 0.5 m/s sideways, 30 rad/s spin, thrown down up to 1.5 m/s), side-ins from beside or below the
+# edge, hand taps up to 0.8 Hz; half the starts dead stops; hard, dead paddles (restitution down to 0.55, a fifth
+# rubber type) at every difficulty, paddles up to 0.25 kg; reward for reaching the target height quickly
+v14:
+  env:
+    servo_variant: "12v_r8"
+    act_delay_ms: [18.0, 5.0, 35.0]
+    side_cam_prob: 0.0
+    held_start_prob: 0.15
+    beside_start_prob: 0.15
+    flight_h: [0.03, 0.40]
+    ceiling_after_land: true
+    overhead_cam_box: [[-0.25, -0.20, 0.70], [0.45, 0.20, 1.30]]
+    age_bias: 0.06
+    depth_scale: 0.05
+    cam_lat_max: 0.15
+    overhead_cam: [-0.068, 0.012, 0.732]
+    overhead_cam_box_p: 0.5
+    cam_base_ms: [15.0, 8.0, 80.0]
+    start_pose_p: 0.3
+    switch_delay_p: 0.5
+    midbounce_p: 0.25
+    hist_noise_p: 0.15
+    rest_spread: 0.95
+    level_error: 0.052
+    push_rate_hz: 0.8
+    rest_roll_p: 0.5
+    toss_p: 0.35
+    sidein_p: 0.25
+    rest_start_prob: 0.5
+    paddle_mass: [0.16, 0.08, 0.25]
+    rubber_fullrange: true
+    rubbers: [[0.40, [0.84, 0.92], [0.30, 0.60]], [0.15, [0.78, 0.86], [0.12, 0.30]], [0.10, [0.80, 0.88], [0.15, 0.35]],
+              [0.05, [0.72, 0.82], [0.08, 0.20]], [0.30, [0.55, 0.75], [0.15, 0.45]]]
+    w_first: 1.0
+    w_wait: 1.0
+v14_p32:
+  env:
+    servo_variant: "12v_r8"
+    act_delay_ms: [18.0, 5.0, 35.0]
+    side_cam_prob: 0.0
+    held_start_prob: 0.15
+    beside_start_prob: 0.15
+    flight_h: [0.03, 0.40]
+    ceiling_after_land: true
+    overhead_cam_box: [[-0.25, -0.20, 0.70], [0.45, 0.20, 1.30]]
+    age_bias: 0.06
+    depth_scale: 0.05
+    cam_lat_max: 0.15
+    overhead_cam: [-0.068, 0.012, 0.732]
+    overhead_cam_box_p: 0.5
+    cam_base_ms: [15.0, 8.0, 80.0]
+    start_pose_p: 0.3
+    switch_delay_p: 0.5
+    midbounce_p: 0.25
+    hist_noise_p: 0.15
+    rest_spread: 0.95
+    level_error: 0.052
+    push_rate_hz: 0.8
+    rest_roll_p: 0.5
+    toss_p: 0.35
+    sidein_p: 0.25
+    rest_start_prob: 0.5
+    paddle_mass: [0.16, 0.08, 0.25]
+    rubber_fullrange: true
+    rubbers: [[0.40, [0.84, 0.92], [0.30, 0.60]], [0.15, [0.78, 0.86], [0.12, 0.30]], [0.10, [0.80, 0.88], [0.15, 0.35]],
+              [0.05, [0.72, 0.82], [0.08, 0.20]], [0.30, [0.55, 0.75], [0.15, 0.45]]]
+    w_first: 1.0
+    w_wait: 1.0
+    p_gain: 32.0
+# Round 9: v14 plus everything still failing in the round-7/8 scenario tests: resting starts replay the runner's
+# scripted launch (60 %, +-15 % and +-1 strike step) then hand over; the real camera's top frame edge (no detections
+# 10-14 cm above the paddle, half the episodes); beside starts made feasible (offset near to far with task difficulty,
+# dropped high enough for the pan to get there) and more of them (25 %); toss speed and spin on a curriculum; taps up
+# to 1 Hz; joint calibration error up to 0.05 rad, at full range in 30 % of episodes
+v15:
+  env:
+    servo_variant: "12v_r8"
+    act_delay_ms: [18.0, 5.0, 35.0]
+    side_cam_prob: 0.0
+    held_start_prob: 0.15
+    flight_h: [0.03, 0.40]
+    ceiling_after_land: true
+    overhead_cam_box: [[-0.25, -0.20, 0.70], [0.45, 0.20, 1.30]]
+    age_bias: 0.06
+    depth_scale: 0.05
+    cam_lat_max: 0.15
+    overhead_cam: [-0.068, 0.012, 0.732]
+    overhead_cam_box_p: 0.5
+    cam_base_ms: [15.0, 8.0, 80.0]
+    start_pose_p: 0.3
+    switch_delay_p: 0.5
+    midbounce_p: 0.25
+    hist_noise_p: 0.15
+    rest_spread: 0.95
+    level_error: 0.052
+    rest_roll_p: 0.5
+    toss_p: 0.35
+    sidein_p: 0.25
+    rest_start_prob: 0.5
+    paddle_mass: [0.16, 0.08, 0.25]
+    rubber_fullrange: true
+    rubbers: [[0.40, [0.84, 0.92], [0.30, 0.60]], [0.15, [0.78, 0.86], [0.12, 0.30]], [0.10, [0.80, 0.88], [0.15, 0.35]],
+              [0.05, [0.72, 0.82], [0.08, 0.20]], [0.30, [0.55, 0.75], [0.15, 0.45]]]
+    w_first: 1.0
+    w_wait: 1.0
+    launch_replay_p: 0.6
+    launch_jitter: 0.15
+    view_top: [0.10, 0.14]
+    view_top_p: 0.5
+    beside_feasible: true
+    beside_start_prob: 0.25
+    beside_offset: [0.08, 0.16]
+    toss_curriculum: true
+    push_rate_hz: 1.0
+    joint_offset: 0.05
+    joint_offset_full_p: 0.3
+v15_p32:
+  env:
+    servo_variant: "12v_r8"
+    act_delay_ms: [18.0, 5.0, 35.0]
+    side_cam_prob: 0.0
+    held_start_prob: 0.15
+    flight_h: [0.03, 0.40]
+    ceiling_after_land: true
+    overhead_cam_box: [[-0.25, -0.20, 0.70], [0.45, 0.20, 1.30]]
+    age_bias: 0.06
+    depth_scale: 0.05
+    cam_lat_max: 0.15
+    overhead_cam: [-0.068, 0.012, 0.732]
+    overhead_cam_box_p: 0.5
+    cam_base_ms: [15.0, 8.0, 80.0]
+    start_pose_p: 0.3
+    switch_delay_p: 0.5
+    midbounce_p: 0.25
+    hist_noise_p: 0.15
+    rest_spread: 0.95
+    level_error: 0.052
+    rest_roll_p: 0.5
+    toss_p: 0.35
+    sidein_p: 0.25
+    rest_start_prob: 0.5
+    paddle_mass: [0.16, 0.08, 0.25]
+    rubber_fullrange: true
+    rubbers: [[0.40, [0.84, 0.92], [0.30, 0.60]], [0.15, [0.78, 0.86], [0.12, 0.30]], [0.10, [0.80, 0.88], [0.15, 0.35]],
+              [0.05, [0.72, 0.82], [0.08, 0.20]], [0.30, [0.55, 0.75], [0.15, 0.45]]]
+    w_first: 1.0
+    w_wait: 1.0
+    launch_replay_p: 0.6
+    launch_jitter: 0.15
+    view_top: [0.10, 0.14]
+    view_top_p: 0.5
+    beside_feasible: true
+    beside_start_prob: 0.25
+    beside_offset: [0.08, 0.16]
+    toss_curriculum: true
+    push_rate_hz: 1.0
+    joint_offset: 0.05
+    joint_offset_full_p: 0.3
+    p_gain: 32.0
+
+# Round 10 (2026-11-01): fitted to the real-ball runs. Servo set 12v_r10 (torque cap on the loaded joints: the real
+# launch reached 0.45 m/s, 12v_r8 predicted 1.03); launch replay with the strike length the runner may adapt to (3-8
+# steps); camera bias 2.5 cm, latency centred on the measured 62 ms (range to 120 ms), depth error growing with ball
+# speed (motion blur at ~8 ms exposure), rare in-flight radius outliers, rolling-shutter timing; apex 9-14 cm (more
+# time per hit for slow servos); a penalty for hitting with the face tilted more than 5 deg.
+v16: &v16
+  env: &v16env
+    servo_variant: "12v_r10"
+    act_delay_ms: [18.0, 5.0, 35.0]
+    side_cam_prob: 0.0
+    held_start_prob: 0.15
+    flight_h: [0.03, 0.40]
+    ceiling_after_land: true
+    overhead_cam_box: [[-0.25, -0.20, 0.70], [0.45, 0.20, 1.30]]
+    age_bias: 0.06
+    depth_scale: 0.05
+    cam_lat_max: 0.12
+    overhead_cam: [-0.068, 0.012, 0.732]
+    overhead_cam_box_p: 0.5
+    cam_base_ms: [12.0, 5.0, 70.0]
+    cam_noise_px: [0.0025, 0.001, 0.005]
+    cam_bias: 0.025
+    depth_speed_k: 0.005
+    radius_outlier_p: 0.03
+    rolling_shutter: 0.07
+    start_pose_p: 0.3
+    switch_delay_p: 0.5
+    midbounce_p: 0.25
+    hist_noise_p: 0.15
+    rest_spread: 0.95
+    level_error: 0.052
+    rest_roll_p: 0.5
+    toss_p: 0.35
+    sidein_p: 0.25
+    rest_start_prob: 0.5
+    paddle_mass: [0.16, 0.08, 0.25]
+    rubber_fullrange: true
+    rubbers: [[0.40, [0.84, 0.92], [0.30, 0.60]], [0.15, [0.78, 0.86], [0.12, 0.30]], [0.10, [0.80, 0.88], [0.15, 0.35]],
+              [0.05, [0.72, 0.82], [0.08, 0.20]], [0.30, [0.55, 0.75], [0.15, 0.45]]]
+    w_first: 1.0
+    w_wait: 1.0
+    launch_replay_p: 0.6
+    launch_jitter: 0.15
+    launch_strike_range: [3, 8]
+    view_top: [0.10, 0.14]
+    view_top_p: 0.5
+    beside_feasible: true
+    beside_start_prob: 0.25
+    beside_offset: [0.08, 0.16]
+    toss_curriculum: true
+    push_rate_hz: 1.0
+    joint_offset: 0.05
+    joint_offset_full_p: 0.3
+    target_apex: [0.09, 0.14]
+    w_tilt_contact: 0.2
+v16_p32:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+v16_p32_lo:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+v16_p32_hi:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.11, 0.15]
+v16_p32_rl:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    launch_replay_p: 0.0
+v16_p32_wide:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    servo_variant: "12v_r10w"
+# Round 11 (2026-11-01): level error, hand taps, beside offsets and toss speed scaled with the task difficulty level,
+# which stayed near 0.1 in round 10, so they were hardly trained. A share of episodes now draws them over the full range.
+# Both start from v16-p32-lo's final (target 7-10 cm).
+v17_p32_cal:            # joint calibration and paddle level up to 3 deg, hand taps up to 1 Hz
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    joint_offset: 0.052
+    joint_offset_full_p: 0.6
+    level_error: 0.052
+    level_error_full_p: 0.6
+    push_rate_hz: 1.0
+    push_full_p: 0.5
+v17_p32_reach:          # landing beside from 9-40 cm up, tosses within the reachable part (0.3 m/s, 15 rad/s)
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    beside_start_prob: 0.4
+    beside_full_p: 0.6
+    toss_p: 0.45
+    toss_vlat: 0.3
+    toss_spin: 15.0
+    toss_full_p: 0.6
+# Round 12 (2026-11-01): "get it bouncing from any angle; a higher first toss for momentum, harder flicks; low bounces
+# need more control, so start high". Higher steered launch (bounce/launch.py NAMED "r12": paddle ~1.0 m/s, first
+# bounce ~12.5 cm from centre, half-way or rim, rolling, tilted, dead paddle) replayed on resting starts; target
+# starts at 15-18 cm for 1-2 s then ramps over 1 s to the steady 8-10 cm (70 % of episodes); paddle may rise 10 cm;
+# more dead paddles. From v17-lo-cont (round-11 continuation of the deploy pick v16-p32-lo).
+v18_p32_sched: &v18
+  env: &v18env
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.08, 0.10]
+    target_sched_p: 0.7
+    target_start: [0.15, 0.18]
+    target_high_s: [1.0, 2.0]
+    target_ramp_s: 1.0
+    launch_name: "r12"
+    launch_steer: true
+    launch_max_action: 2.0
+    launch_replay_p: 0.6
+    launch_strike_range: [4, 6]
+    paddle_box: [0.12, 0.10]
+    level_error_full_p: 0.3
+    rubbers: [[0.30, [0.84, 0.92], [0.30, 0.60]], [0.12, [0.78, 0.86], [0.12, 0.30]], [0.08, [0.80, 0.88], [0.15, 0.35]],
+              [0.05, [0.72, 0.82], [0.08, 0.20]], [0.45, [0.55, 0.75], [0.15, 0.45]]]
+v18_p32_sched_wide:     # the strike length the runner's adaptation may settle on, wider
+  env:
+    <<: *v18env
+    launch_strike_range: [3, 8]
+    launch_jitter: 0.3
+v18_p32_t12:            # comparison: a steady 12 cm target, no schedule
+  env:
+    <<: *v18env
+    target_apex: [0.11, 0.13]
+    target_sched_p: 0.0
+v18_p32_sched_deep:     # the higher, drift-prone launch (dip 4 steps: ~15 cm)
+  env:
+    <<: *v18env
+    launch_name: "r12_deep"
+# Round 13 (2026-11-01): the runner's --auto-level (wrist trim from the ball's drift) in training, with an invisible
+# paddle tilt (table tilt: gravity vs the base) up to 3 deg and joint calibration error up to 2 deg, each over the full
+# range in half the episodes. From v16-p32-lo; v19_p32_tilt is the same without auto-level (control).
+v19_p32_al:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    auto_level: true
+    table_tilt: 0.052
+    table_tilt_full_p: 0.5
+    joint_offset: 0.035
+    joint_offset_full_p: 0.5
+v19_p32_tilt:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    table_tilt: 0.052
+    table_tilt_full_p: 0.5
+    joint_offset: 0.035
+    joint_offset_full_p: 0.5
+# Round 13b (2026-11-02): "the flicks should be harder to get it bouncing". The hard launch r13 (r12 / r12_deep retuned
+# with a return stroke that brings the paddle back down toward home before the hand-off) replayed on most resting starts,
+# at 60-105 % strength (a curriculum by mixture from gentler to the full flick), with the round-10 launch on the rest, so
+# the policy learns the catch after it. From v16-p32-lo.
+v20_p32_flick:
+  env:
+    <<: *v16env
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    rest_start_prob: 0.6
+    launch_replay_p: 0.9
+    launch_mix: ["", "r13"]
+    launch_mix_p: [0.3, 0.7]
+    launch_scale_range: [0.6, 1.05]
+    launch_steer: true
+    launch_max_action: 2.0
+    paddle_box: [0.12, 0.10]

@@ -1,0 +1,368 @@
+{
+ "paddle_red": {
+  "kind": "paddle",
+  "source": "nvidia_simready-assets/misc_toy_pongPaddle_bat_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 4182,
+    "rgb": [
+     0.20000000298023224,
+     0.20000000298023224,
+     0.20000000298023224
+    ],
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.153,
+   -0.0762,
+   0.0
+  ],
+  "bbox_max": [
+   0.1088,
+   0.0762,
+   0.0311
+  ]
+ },
+ "paddle_black": {
+  "kind": "paddle",
+  "source": "nvidia_simready-assets/misc_toy_pongPaddle_bat_a02",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 3964,
+    "rgb": [
+     0.20000000298023224,
+     0.20000000298023224,
+     0.20000000298023224
+    ],
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.1551,
+   -0.0766,
+   0.0
+  ],
+  "bbox_max": [
+   0.1066,
+   0.0759,
+   0.0312
+  ]
+ },
+ "paddle_scan_orange": {
+  "kind": "paddle",
+  "source": "ALLSIDES_simready-scanned-objects/table_tennis_racket_3BBQBK5EWT",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 22802,
+    "rgb": [
+     0.8,
+     0.8,
+     0.8
+    ],
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.1329,
+   -0.0745,
+   0.001
+  ],
+  "bbox_max": [
+   0.1239,
+   0.0757,
+   0.0286
+  ]
+ },
+ "mug_black": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/kitchenware_mug_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 16192,
+    "rgb": null,
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.0589,
+   -0.0762,
+   0.0
+  ],
+  "bbox_max": [
+   0.059,
+   0.0587,
+   0.0635
+  ]
+ },
+ "mug_red": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/kitchenware_mug_f01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 18618,
+    "rgb": null,
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.0553,
+   -0.0925,
+   0.0001
+  ],
+  "bbox_max": [
+   0.0553,
+   0.0553,
+   0.1102
+  ]
+ },
+ "mug_scan": {
+  "kind": "prop",
+  "source": "ALLSIDES_simready-scanned-objects/mug_A07RDPW843",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 22744,
+    "rgb": [
+     0.8,
+     0.8,
+     0.8
+    ],
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.0481,
+   -0.0856,
+   -0.0002
+  ],
+  "bbox_max": [
+   0.0482,
+   0.07,
+   0.0608
+  ]
+ },
+ "mouse_scan": {
+  "kind": "prop",
+  "source": "ALLSIDES_simready-scanned-objects/computer_mouse_62RQ5CXV0E",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 23484,
+    "rgb": [
+     0.8,
+     0.8,
+     0.8
+    ],
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.0527,
+   -0.0374,
+   0.0002
+  ],
+  "bbox_max": [
+   0.0523,
+   0.0379,
+   0.0625
+  ]
+ },
+ "notebook": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/misc_notebook_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 5036,
+    "rgb": null,
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.1183,
+   -0.085,
+   0.0
+  ],
+  "bbox_max": [
+   0.1106,
+   0.085,
+   0.01
+  ]
+ },
+ "tape_dispenser": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/misc_tape_dispenser_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 18036,
+    "rgb": null,
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.0792,
+   -0.032,
+   -0.0
+  ],
+  "bbox_max": [
+   0.0793,
+   0.032,
+   0.066
+  ]
+ },
+ "tape_roll": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/misc_tape_refill_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 9754,
+    "rgb": [
+     0.48514682054519653,
+     0.4341542422771454,
+     0.1529262661933899
+    ]
+   }
+  ],
+  "bbox_min": [
+   -0.0275,
+   -0.0095,
+   0.0
+  ],
+  "bbox_max": [
+   0.0275,
+   0.0095,
+   0.055
+  ]
+ },
+ "marker_orange": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/stationery_marker_alcohol_chromeOrange_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 8904,
+    "rgb": null,
+    "png": "part0.png"
+   },
+   {
+    "obj": "part1.obj",
+    "faces": 19374,
+    "rgb": null,
+    "png": "part1.png"
+   },
+   {
+    "obj": "part2.obj",
+    "faces": 8904,
+    "rgb": null,
+    "png": "part2.png"
+   }
+  ],
+  "bbox_min": [
+   -0.0607,
+   -0.0066,
+   0.0
+  ],
+  "bbox_max": [
+   0.059,
+   0.0066,
+   0.0128
+  ]
+ },
+ "keyboard": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/computer_keyboard_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 27378,
+    "rgb": null,
+    "png": "part0.png"
+   }
+  ],
+  "bbox_min": [
+   -0.221,
+   -0.0703,
+   0.0
+  ],
+  "bbox_max": [
+   0.221,
+   0.0717,
+   0.0202
+  ]
+ },
+ "cup_white": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/dishware_plastic_cup_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 10078,
+    "rgb": [
+     0.007498743012547493,
+     0.06662595272064209,
+     0.2704978883266449
+    ]
+   }
+  ],
+  "bbox_min": [
+   -0.0321,
+   -0.0321,
+   0.0
+  ],
+  "bbox_max": [
+   0.0321,
+   0.0321,
+   0.0999
+  ]
+ },
+ "lamp_white": {
+  "kind": "prop",
+  "source": "nvidia_simready-assets/lamp_table_bedside_a01",
+  "license": "CC-BY-4.0",
+  "parts": [
+   {
+    "obj": "part0.obj",
+    "faces": 21104,
+    "rgb": null,
+    "png": "part0.png"
+   },
+   {
+    "obj": "part1.obj",
+    "faces": 1218,
+    "rgb": null,
+    "png": "part1.png"
+   }
+  ],
+  "bbox_min": [
+   -0.0943,
+   -0.0994,
+   0.0
+  ],
+  "bbox_max": [
+   0.1036,
+   0.0994,
+   0.3717
+  ]
+ }
+}

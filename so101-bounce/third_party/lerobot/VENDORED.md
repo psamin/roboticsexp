@@ -1,0 +1,1 @@
+Copied from https://github.com/huggingface/lerobot at commit e624f3f7f8411ec3a02635d06e79373341e5ef35 (2026-09-24), the checkout the user's SO-101 scripts run against. Apache-2.0 (LICENSE). Unmodified.

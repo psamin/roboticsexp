@@ -1,0 +1,27 @@
+[project]
+name = "so101-bounce"
+version = "0.1.0"
+description = "Zero-shot sim-to-real ping-pong bouncing on an SO-101: GPU simulator, PPO, ball detector, real-arm runtime"
+requires-python = "==3.12.*"
+dependencies = [
+    "torch>=2.7,<2.12",
+    "numpy>=2.0,<2.3",
+    "pyyaml",
+    "mujoco==3.13.0",                 # robot model (kinematics source), renders, synthetic detector images
+    "opencv-python-headless>=4.9,<4.14",
+    "onnxruntime",                    # ball detector on the Mac
+    "pillow",
+    "imageio",
+    "imageio-ffmpeg",
+    "pyopengl",
+    "pytest",
+    "lerobot[feetech]",               # SO-101 motor bus, calibration (vendored copy, see third_party/lerobot)
+    "pyobjc-framework-avfoundation>=13.0 ; sys_platform == 'darwin'",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+
+[tool.uv.sources]
+lerobot = { path = "third_party/lerobot", editable = true }
