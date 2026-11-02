@@ -1,0 +1,90 @@
+{
+ "checkpoint": "/nethome-instruction/pi34/ppo-drone-results/run-12871/train/checkpoints/best.pt",
+ "route_env_frame_m": [
+  [
+   0.0,
+   0.0,
+   1.0
+  ],
+  [
+   0.6,
+   0.0,
+   1.2
+  ],
+  [
+   0.3,
+   0.6,
+   0.8
+  ],
+  [
+   -0.4,
+   0.5,
+   1.25
+  ],
+  [
+   -0.7,
+   -0.1,
+   0.85
+  ],
+  [
+   -0.2,
+   -0.65,
+   1.15
+  ],
+  [
+   0.55,
+   -0.5,
+   0.8
+  ],
+  [
+   0.0,
+   0.0,
+   1.0
+  ]
+ ],
+ "waypoints": [
+  {
+   "waypoint": 0,
+   "reached": true,
+   "time_s": 1.02,
+   "final_dist_cm": 0.8283149006469861
+  },
+  {
+   "waypoint": 1,
+   "reached": true,
+   "time_s": 1.3800000000000001,
+   "final_dist_cm": 2.755352426474802
+  },
+  {
+   "waypoint": 2,
+   "reached": true,
+   "time_s": 1.06,
+   "final_dist_cm": 3.6764261569635908
+  },
+  {
+   "waypoint": 3,
+   "reached": true,
+   "time_s": 1.36,
+   "final_dist_cm": 3.0559098271019978
+  },
+  {
+   "waypoint": 4,
+   "reached": true,
+   "time_s": 1.24,
+   "final_dist_cm": 4.705312064654484
+  },
+  {
+   "waypoint": 5,
+   "reached": true,
+   "time_s": 1.32,
+   "final_dist_cm": 3.6988301531123673
+  },
+  {
+   "waypoint": 6,
+   "reached": true,
+   "time_s": 1.16,
+   "final_dist_cm": 5.279908102457436
+  }
+ ],
+ "seconds": 8.540000000000001
+}
