@@ -125,6 +125,11 @@ def main():
                     help="with --virtual-ball: ball-paddle restitution (default 0.85; lower = a deader paddle)")
     ap.add_argument("--launch-steps", type=int, default=None,
                     help="strike length in control steps (default: the tuned value; it adapts during the run)")
+    ap.add_argument("--launch-lean", type=float, default=0.0,
+                    help="tilt the paddle face this many degrees forward (away from the handle) during the strike; "
+                         "use it when launches throw the ball back toward the handle")
+    ap.add_argument("--record", action="store_true",
+                    help="save the overhead camera video (detections circled, state stamped) next to the log")
     ap.add_argument("--launch", action="store_true",
                     help="start a resting ball with the scripted dip-and-strike (bounce/launch.py), then the policy")
     ap.add_argument("--vb-hz", type=float, default=200.0,
@@ -143,17 +148,27 @@ def main():
         lp = LAUNCH.Launch(**LAUNCH.DEFAULTS[p_gain].as_dict())
         if a.launch_steps:
             lp.strike_steps = a.launch_steps
+        if a.launch_lean:                                        # + wrist flex tilts the face normal forward (+x)
+            s0, s1, s2 = lp.strike
+            lp.strike = (s0, s1, s2 + np.radians(a.launch_lean) / scale[3])
+            print(f"launch strike leans {a.launch_lean:+.1f} deg forward")
         launch = list(LAUNCH.actions(lp)[:, 0].numpy())         # the same actions the simulator ran
     launch_q, t_launched, relaunches = [], None, 0
     kin = ArmKinematics(build_model(), 1)
     lower, upper = kin.lower.numpy() + 0.02, kin.upper.numpy() - 0.02
     hold = json.loads(A.HOLD.read_text())
     print(f"policy {a.checkpoint}: {hz:.0f} Hz, P gain {p_gain}, history {cfg.history}, detections {cfg.cam_k}")
-    cam = finder = model = vb = None
+    cam = finder = model = vb = writer = None
     if not a.virtual_ball:
         cc = CONFIG["cameras"]["overhead"]
         cam = Camera(camera_index(cc), cc["width"], cc["height"], cc["fps"], CONFIG.get("camera_latency_s", 0.035))
         lock_camera(cam, cc)
+        if a.record:
+            import cv2
+            video = A.HERE / "logs" / f"run-{time.strftime('%Y%m%d-%H%M%S')}.mp4"
+            (A.HERE / "logs").mkdir(exist_ok=True)
+            writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"), cc["fps"], (cc["width"], cc["height"]))
+            print(f"recording to {video}")
         model = CameraModel()
         made_with = json.loads(rig_calib.read_text()).get("joint_map_offset_deg")
         if made_with is None or np.abs(np.array(made_with) - rig_jmap()[1]).max() > 0.05:
@@ -245,6 +260,15 @@ def main():
                         p = model.ball_position(*d)
                         ro.ball(tc, p)
                         dets_log.append((tc - t_start, *p))
+                    if writer is not None:
+                        img = frame.copy()
+                        if finder.roi is not None:
+                            cv2.rectangle(img, finder.roi[:2], finder.roi[2:], (255, 160, 0), 1)
+                        if d is not None:
+                            cv2.circle(img, (int(d[0]), int(d[1])), int(d[2]), (0, 0, 255), 2)
+                        cv2.putText(img, f"{tc - t_start:6.2f}s {state}", (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                                    (0, 0, 255), 2)
+                        writer.write(img)
                 recent = [x for x in ro.det if now - x[0] < LOST_S]
                 if state == "armed":
                     rel = [(x[1] - home).numpy() for x in ro.det if now - x[0] < START_GAP_S][-2:]
@@ -363,6 +387,8 @@ def main():
             A.park(b)
             if cam is not None:
                 cam.close()
+            if writer is not None:
+                writer.release()
         (A.HERE / "logs").mkdir(exist_ok=True)
         out = A.HERE / "logs" / f"run-{time.strftime('%Y%m%d-%H%M%S')}.npz"
         lm = np.array(log["loop_ms"]) if log["loop_ms"] else np.zeros(1)
