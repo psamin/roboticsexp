@@ -116,7 +116,10 @@ def lock_camera(cam, cc: dict):
             out = subprocess.run(base + ["-g", name], capture_output=True, text=True, timeout=5).stdout.strip()
         except (OSError, subprocess.TimeoutExpired):
             return None
-        num = re.findall(r"-?\d+", out.splitlines()[-1]) if out else []
+        last = out.splitlines()[-1] if out else ""
+        if last.endswith(("true", "false")):
+            return int(last.endswith("true"))
+        num = re.findall(r"-?\d+", last)
         return int(num[-1]) if num else None
 
     # Re-run auto exposure, white balance and focus on every open: the camera keeps the last manual values in its RAM,
@@ -138,10 +141,13 @@ def lock_camera(cam, cc: dict):
     want = {"auto-exposure-priority": 0, "auto-exposure-mode": 1, "exposure-time-abs": exp, "gain": gain,
             "auto-white-balance-temp": 0, "white-balance-temp": settled["white-balance-temp"], "auto-focus": 0,
             "focus-abs": settled["focus-abs"]}
+    if u.get("autofocus"):                                     # config: keep focusing during the run
+        want["auto-focus"], want["focus-abs"] = 1, None
     args = base + sum([["-s", f"{k}={v}"] for k, v in want.items() if v is not None], [])
     subprocess.run(args, capture_output=True, text=True, timeout=5)
-    back = {k: get(k) for k in ("auto-exposure-mode", "exposure-time-abs", "gain")}
-    print(f"camera locked: exposure {back['exposure-time-abs'] and back['exposure-time-abs'] / 10} ms, gain {back['gain']} "
+    back = {k: get(k) for k in ("auto-exposure-mode", "exposure-time-abs", "gain", "auto-focus")}
+    print(f"camera locked: exposure {back['exposure-time-abs'] and back['exposure-time-abs'] / 10} ms, gain {back['gain']}, "
+          f"autofocus {'on' if back['auto-focus'] else 'off'} "
           f"(manual = {back['auto-exposure-mode'] == 1}; auto had settled at {settled})")
     return back
 
