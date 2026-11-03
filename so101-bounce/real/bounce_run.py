@@ -187,6 +187,9 @@ def main():
         q_meas = deg_to_sim(pos)
         fk0 = kin.forward(torch.tensor(q_meas, dtype=torch.float32)[None])
         home = fk0["paddle_o"][0]
+        if finder is not None:                                   # only look around the paddle (not at the arm)
+            finder.roi = model.paddle_roi(home.numpy(), size=(cc["width"], cc["height"]))
+            print(f"ball search window (pixels): {finder.roi}")
         tilt = np.degrees(np.arccos(np.clip(float(fk0["paddle_R"][0, 2, 2]), -1.0, 1.0)))
         print(f"holding: sag trimmed {max(abs(cmd[n] - hold[n]) for n in A.ARM):.1f} deg; model says the paddle is "
               f"tilted {tilt:.1f} deg (level by hand = joint map OK if this is small)")

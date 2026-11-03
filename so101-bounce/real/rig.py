@@ -172,6 +172,7 @@ class BallFinder:
         self.adaptive = colour == "white" and colour not in CONFIG.get("ball_hsv", {})
         self.min_r, self.max_r = min_r, max_r
         self.last = None
+        self.roi = None                                                # (x0, y0, x1, y1): only search inside this box
 
     def find(self, frame):
         """Returns (u, v, radius_px) in full-frame pixels, or None."""
@@ -182,6 +183,10 @@ class BallFinder:
             s = int(max(40, 6 * r))
             regions.append((max(0, int(u) - s), max(0, int(v) - s), min(w, int(u) + s), min(h, int(v) + s)))
         regions.append((0, 0, w, h))
+        if self.roi is not None:                                       # clip every search region to the box
+            rx0, ry0, rx1, ry1 = self.roi
+            regions = [(max(x0, rx0), max(y0, ry0), min(x1, rx1), min(y1, ry1)) for x0, y0, x1, y1 in regions]
+            regions = [r for r in regions if r[2] - r[0] > 4 and r[3] - r[1] > 4]
         lo, hi = self.lo, self.hi
         if self.adaptive:
             v = cv2.cvtColor(frame[::4, ::4], cv2.COLOR_BGR2HSV)[..., 2]
@@ -239,6 +244,19 @@ class CameraModel:
         self.t = np.array(c["t_base_from_cam"], float)
         self.radius_scale = float(c.get("radius_scale", 1.0))
         self.ball_px = float(np.median(c["rad"])) if c.get("rad") else None   # ball radius at the calibration poses
+
+    def project(self, p_base):
+        """Base-frame point (m) -> pixel (u, v)."""
+        x, y, z = self.R.T @ (np.asarray(p_base, float) - self.t)
+        return self.K[0, 0] * x / z + self.K[0, 2], self.K[1, 1] * y / z + self.K[1, 2]
+
+    def paddle_roi(self, home, half=0.14, z=(-0.05, 0.30), size=(640, 480)):
+        """Pixel box around the paddle's bounce volume (home +-half m sideways, z above it), so the finder cannot lock
+        onto white parts of the arm or the room."""
+        pts = [self.project(np.asarray(home, float) + np.array([dx, dy, dz]))
+               for dx in (-half, half) for dy in (-half, half) for dz in z]
+        u, v = np.array(pts).T
+        return (max(0, int(u.min())), max(0, int(v.min())), min(size[0], int(u.max()) + 1), min(size[1], int(v.max()) + 1))
 
     def ball_position(self, u, v, r_px):
         fx, fy, cx, cy = self.K[0, 0], self.K[1, 1], self.K[0, 2], self.K[1, 2]

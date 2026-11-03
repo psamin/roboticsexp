@@ -70,6 +70,7 @@ def main(seconds=40.0):
         trim_sag(b, hold, dict(hold))                              # joints at the levelled pose (sag and slack)
         fk = kin.forward(torch.tensor(rig.deg_to_sim(A.read_pos(b)), dtype=torch.float32)[None])
         o, n = fk["paddle_o"][0].numpy(), fk["paddle_R"][0, :, 2].numpy()
+        finder.roi = model.paddle_roi(o, size=(cc["width"], cc["height"]))  # only look around the paddle
         print(f"drop the ball onto the paddle centre from 20-30 cm, let it bounce out, repeat; {seconds:.0f} s")
         t_end, last, t_print, seen = time.perf_counter() + seconds, -1, time.perf_counter(), 0
         while time.perf_counter() < t_end:

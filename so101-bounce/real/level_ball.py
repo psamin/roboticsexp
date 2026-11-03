@@ -98,6 +98,7 @@ def main():
         cmd = trim_sag(b, target, dict(hold))                      # trim the sag so the joints sit at the target
         q = rig.deg_to_sim(A.read_pos(b))
         home = kin.forward(torch.tensor(q, dtype=torch.float32)[None])["paddle_o"][0].numpy()
+        finder.roi = model.paddle_roi(home, size=(cc["width"], cc["height"]))  # only look around the paddle
         prev = None
         for k in range(ROUNDS):
             print(f"round {k + 1}: set the ball near the paddle centre and take your hand away...")
