@@ -229,6 +229,9 @@ def run(name, ck, env, hold):
         def ball_position(self, x, y, z):
             return np.array([x, y, z])
 
+        def paddle_roi(self, home, **kw):                  # the fake camera sees only the ball
+            return None
+
     def fake_input(*a):
         if T["enter"] is None and "Enter to arm" in (a[0] if a else ""):
             T["enter"] = time.perf_counter()
