@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import arm as A                                                    # noqa: E402
 import rig                                                         # noqa: E402
+from level_ball import trim_sag                                    # noqa: E402
 from bounce.robot import ArmKinematics, build_model                # noqa: E402
 
 G = 9.81
@@ -62,14 +63,19 @@ def main(seconds=40.0):
     hold = json.loads(A.HOLD.read_text())
     b = A.open_bus()
     rest = A.hold_here(b)
-    track = []
+    track, raw = [], []
     try:
+        A.set_registers(b, {"P_Coefficient": 32, **A.BOUNCE_REGISTERS})   # hold as stiffly as when bouncing
         print(f"to the bounce pose ({A.glide(b, hold, 3.0):.1f} deg); the arm holds still")
+        trim_sag(b, hold, dict(hold))                              # joints at the levelled pose (sag and slack)
         fk = kin.forward(torch.tensor(rig.deg_to_sim(A.read_pos(b)), dtype=torch.float32)[None])
         o, n = fk["paddle_o"][0].numpy(), fk["paddle_R"][0, :, 2].numpy()
         print(f"drop the ball onto the paddle centre from 20-30 cm, let it bounce out, repeat; {seconds:.0f} s")
-        t_end, last = time.perf_counter() + seconds, -1
+        t_end, last, t_print, seen = time.perf_counter() + seconds, -1, time.perf_counter(), 0
         while time.perf_counter() < t_end:
+            if time.perf_counter() - t_print > 5.0:
+                t_print = time.perf_counter()
+                print(f"  {t_end - t_print:4.0f} s left: ball seen in {seen} frames, {len(track)} of them over the paddle")
             frame, tc, k = cam.get()
             if frame is None or k == last:
                 time.sleep(0.003)
@@ -78,23 +84,30 @@ def main(seconds=40.0):
             d = finder.find(frame)
             if d is None:
                 continue
+            seen += 1
             p = model.ball_position(*d)
+            raw.append((tc, *p, *d))
             if np.hypot(*(p - o)[:2]) < 0.10:                      # over the paddle
                 track.append((tc, float((p - o) @ n) - rig.BALL_RADIUS))
     except KeyboardInterrupt:
         print("stopped")
     finally:
+        A.set_registers(b, A.LEROBOT_DEFAULTS)
         A.glide(b, {nm: rest[nm] for nm in A.ARM}, 3.0)
         A.park(b)
         cam.close()
+    (A.HERE / "logs").mkdir(exist_ok=True)
+    log = A.HERE / "logs" / f"drop-{time.strftime('%Y%m%d-%H%M%S')}.npz"
+    np.savez(log, track=np.array(track), raw=np.array(raw), paddle_o=o, paddle_n=n)   # before any analysis
+    print(f"log: {log}")
+    if len(track) < 10:
+        raise SystemExit(f"saw the ball over the paddle in only {len(track)} frames; drop it onto the paddle centre")
     es, speeds = restitution(track)
     if not es:
         raise SystemExit(f"no complete bounce pairs seen ({len(track)} detections over the paddle); drop from higher, "
                          "near the centre")
     print(f"restitution e = {np.median(es):.2f} (median of {len(es)} impacts; spread {np.percentile(es, 10):.2f}-"
           f"{np.percentile(es, 90):.2f}); impact speeds {np.round(speeds[:8], 2).tolist()} m/s")
-    (A.HERE / "logs").mkdir(exist_ok=True)
-    np.save(A.HERE / "logs" / f"drop-{time.strftime('%Y%m%d-%H%M%S')}.npy", np.array(track))
 
 
 if __name__ == "__main__":

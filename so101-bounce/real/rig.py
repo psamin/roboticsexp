@@ -119,15 +119,23 @@ def lock_camera(cam, cc: dict):
         num = re.findall(r"-?\d+", out.splitlines()[-1]) if out else []
         return int(num[-1]) if num else None
 
-    t_end = time.perf_counter() + 2.0                          # let auto exposure settle on live frames first
-    while time.perf_counter() < t_end and cam.get()[2] < 30:
+    # Re-run auto exposure, white balance and focus on every open: the camera keeps the last manual values in its RAM,
+    # so without this a later lock would just re-read stale settings (and focus from before the camera was moved).
+    subprocess.run(base + ["-s", "auto-exposure-mode=8", "-s", "auto-exposure-priority=0",
+                           "-s", "auto-white-balance-temp=1", "-s", "auto-focus=1"], capture_output=True, text=True, timeout=5)
+    t_end = time.perf_counter() + 3.0                          # let them settle on live frames
+    while time.perf_counter() < t_end:
+        cam.get()
         time.sleep(0.05)
     settled = {n: get(n) for n in ("exposure-time-abs", "gain", "white-balance-temp", "focus-abs")}
     if settled["exposure-time-abs"] is None:
         print(f"note: uvc-util could not read the camera ({' '.join(base)}); exposure stays automatic")
         return None
     exp = min(settled["exposure-time-abs"], u.get("max_exposure", 10 ** 6))
-    want = {"auto-exposure-priority": 0, "auto-exposure-mode": 1, "exposure-time-abs": exp, "gain": settled["gain"],
+    gain = settled["gain"]
+    if gain is not None and exp < settled["exposure-time-abs"]:           # shorter exposure (less blur): same brightness
+        gain = min(255, round(gain * settled["exposure-time-abs"] / exp))
+    want = {"auto-exposure-priority": 0, "auto-exposure-mode": 1, "exposure-time-abs": exp, "gain": gain,
             "auto-white-balance-temp": 0, "white-balance-temp": settled["white-balance-temp"], "auto-focus": 0,
             "focus-abs": settled["focus-abs"]}
     args = base + sum([["-s", f"{k}={v}"] for k, v in want.items() if v is not None], [])
