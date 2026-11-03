@@ -66,6 +66,17 @@ def watch_roll(cam, finder, model, home, timeout=60.0):
     return acc / (0.6 * G), len(track), float(t[-1])
 
 
+def trim_sag(b, target, cmd, n=150):
+    """Nudge the command until the joints sit at `target` (gravity sag and the wrist's slack); returns the command."""
+    for _ in range(n):
+        pos = A.read_pos(b)
+        for nme in A.ARM:
+            cmd[nme] = float(np.clip(cmd[nme] + 0.06 * (target[nme] - pos[nme]), target[nme] - 12, target[nme] + 12))
+        b.sync_write("Goal_Position", cmd)
+        time.sleep(0.02)
+    return cmd
+
+
 def main():
     sign, off = rig._jmap()
     env = BounceEnv(EnvCfg(num_envs=1, device="cpu"))
@@ -81,14 +92,10 @@ def main():
     rest = A.hold_here(b)
     saved = None
     try:
+        A.set_registers(b, {"P_Coefficient": 32, **A.BOUNCE_REGISTERS})   # hold as stiffly as when bouncing
         print(f"to the bounce pose ({A.glide(b, hold, 3.0):.1f} deg)")
-        cmd = dict(hold)
-        for _ in range(150):                                       # trim the sag so the joints sit at the command
-            pos = A.read_pos(b)
-            for nme in A.ARM:
-                cmd[nme] = float(np.clip(cmd[nme] + 0.06 * (hold[nme] - pos[nme]), hold[nme] - 12, hold[nme] + 12))
-            b.sync_write("Goal_Position", cmd)
-            time.sleep(0.02)
+        target = dict(hold)
+        cmd = trim_sag(b, target, dict(hold))                      # trim the sag so the joints sit at the target
         q = rig.deg_to_sim(A.read_pos(b))
         home = kin.forward(torch.tensor(q, dtype=torch.float32)[None])["paddle_o"][0].numpy()
         prev = None
@@ -99,11 +106,12 @@ def main():
                 print("  did not see the ball roll on the paddle (put it near the centre); trying again")
                 continue
             real, nfr, span = got
-            q = rig.deg_to_sim(A.read_pos(b))
+            pos = A.read_pos(b)
+            q = rig.deg_to_sim(pos)
             mdl = tilt_xy(kin, q)
             deg = np.degrees(np.arcsin(np.clip(real, -1, 1)))
             print(f"  real tilt {np.round(deg, 2)} deg (toward +x forward, +y left) from {nfr} frames over {span:.2f} s; "
-                  f"model says {np.round(np.degrees(mdl), 2)}")
+                  f"model says {np.round(np.degrees(mdl), 2)}; wrist flex {pos['wrist_flex']:.2f}, roll {pos['wrist_roll']:.2f}")
             if np.hypot(*deg) < GOAL_DEG:
                 saved = A.read_pos(b)
                 print("  level")
@@ -119,16 +127,14 @@ def main():
             J = np.stack([(tilt_xy(kin, q + 0.005 * np.eye(5)[j]) - mdl) / 0.005 for j in (3, 4)], 1)
             dq = np.linalg.solve(J, -real)                         # tilt the wrist against the measured slope
             dq = np.clip(dq, -np.radians(3), np.radians(3))
-            q_cmd = rig.deg_to_sim(cmd)
-            q_cmd[3:5] += dq
-            new = rig.sim_to_deg(q_cmd)
-            for s in np.linspace(0, 1, 30)[1:]:                    # ramp from the held (sag-trimmed) command, not
-                b.sync_write("Goal_Position", {n: cmd[n] + s * (new[n] - cmd[n]) for n in A.ARM})   # from the joints
+            q_tgt = rig.deg_to_sim(target)
+            q_tgt[3:5] += dq
+            new_target = rig.sim_to_deg(q_tgt)
+            new = {n: cmd[n] + new_target[n] - target[n] for n in A.ARM}
+            for s in np.linspace(0, 1, 30)[1:]:                    # ramp the held command by the correction
+                b.sync_write("Goal_Position", {n: cmd[n] + s * (new[n] - cmd[n]) for n in A.ARM})
                 time.sleep(0.02)
-            cmd = new
-            for _ in range(25):                                    # settle
-                b.sync_write("Goal_Position", cmd)
-                time.sleep(0.02)
+            target, cmd = new_target, trim_sag(b, new_target, new, n=75)   # then make the joints reach it (slack)
             prev = (deg, mdl)
             print(f"  wrist flex {np.degrees(dq[0]):+.2f} deg, roll {np.degrees(dq[1]):+.2f} deg; take the ball off")
             time.sleep(1.0)
@@ -137,6 +143,7 @@ def main():
     finally:
         A.glide(b, hold, 1.0)
         A.pause("Take the ball off, press Enter (the arm folds back and turns off)...")
+        A.set_registers(b, A.LEROBOT_DEFAULTS)
         A.glide(b, {n: rest[n] for n in A.ARM}, 3.0)
         A.park(b)
         cam.close()
