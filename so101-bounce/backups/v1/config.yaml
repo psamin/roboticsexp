@@ -1,0 +1,16 @@
+# Real-arm settings, copied from so101/env.sh (2026-10-31). Edit here; the real/ scripts read this file.
+follower_port: /dev/tty.usbmodem5B790811541
+leader_port: /dev/tty.usbmodem5B901030671
+follower_calibration: calibration/so_follower/my_follower.json   # copied from ~/.cache/huggingface/lerobot
+leader_calibration: calibration/so_leader/my_leader.json
+use_gripper: false       # false = paddle zip-tied/taped into the jaws: the gripper servo (ID 6) is left out entirely
+# Simulator angle = sign * (LeRobot degrees - offset_deg). Wrist offsets fitted 2026-10-31 from the taped paddle
+# levelled by hand (roll 96: the paddle sits ~90 deg around the handle from the model's mount; flex 13: tape pitch).
+joint_map: {sign: [1, 1, 1, 1, 1], offset_deg: [0.0, 0.0, 0.0, 10.8, 92.5]}
+ball_colour: white      # the ball in use (white or orange): the camera finder looks for this colour
+cameras:
+  overhead: {name: "HD Pro Webcam C920", uvc: {vid_pid: "0x046d:0x08e5", lock: false}, index: 0, width: 640, height: 480, fps: 30}   # Logitech C920, mounted behind the base (Dream-1 layout)
+  wrist: {name: "USB HD Camera", index: 1, width: 480, height: 640, fps: 30, rotation: 90}
+  side: null          # the planned 120 fps side camera (Arducam OV9281): set {index: N, ...} once it is connected
+# Cameras are found by name (the index is only a fallback off macOS); the scripts stop if one is missing.
+camera_latency_s: 0.048     # measured by calibrate_camera.py (frame read time minus capture)
