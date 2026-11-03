@@ -304,8 +304,11 @@ def main():
                         np.ptp(np.array(span)[:, 2]) < 0.04
                     on_paddle = still and abs(float(span[-1][2] - fk["paddle_o"][0, 2]) - BALL_RADIUS) < 0.04 and \
                         np.hypot(*(span[-1][:2] - home[:2].numpy())) < 0.08
-                    if launch and on_paddle and not launch_q and relaunches < 3 and now - t_active > 0.8 and \
-                            all(now - x[0] < 0.8 for x in ro.det[-10:]):   # ball left sitting on the paddle: pop it again
+                    near = [x[1].numpy() for x in ro.det if now - x[0] < 0.5]
+                    settled = len(near) >= 8 and np.ptp(np.array(near)[:, :2], 0).max() < 0.03 and \
+                        all(abs(float(x[2] - fk["paddle_o"][0, 2]) - BALL_RADIUS) < 0.04 and
+                            np.hypot(*(x[:2] - home[:2].numpy())) < 0.08 for x in near)   # sitting or rolling, not bouncing
+                    if launch and settled and not launch_q and relaunches < 3 and now - t_active > 0.5:
                         launch_q, t_launched, relaunches = list(launch), now, relaunches + 1
                         print(f"  ball resting on the paddle: launching again ({relaunches})")
                     static = now - t_active > STATIC_S and still and \
