@@ -160,6 +160,9 @@ class EnvCfg:
     w_fail: float = 3.0
     w_first: float = 0.0                        # bonus for the first bounce within 3 cm of the target height
     w_wait: float = 0.0                         # per second until that first on-target bounce (launch quickly)
+    w_back: float = 0.0                         # per m of first-apex drift toward -x (the paddle handle and the base)
+    handle_keepout: float = 0.0                 # m: a ball off the paddle this far behind its centre (-x) within 4 cm
+                                                # of paddle height is lost (it comes down on the handle); 0 = off
     # round 9
     launch_replay_p: float = 0.0                # resting starts that first run the runner's scripted launch
                                                 # (bounce/launch.py, its exact actions), then hand over to the policy
@@ -360,7 +363,8 @@ class BounceEnv:
                 self.launch_strike[i, d0:d0 + L] = 1.0
         self.on_target = torch.zeros(N, dtype=torch.bool, device=dev)   # a bounce within 3 cm of the target yet
         # episode statistics
-        self.ep = {k: z(N) for k in ("ret", "bounces", "apex_err", "lateral", "launch_t", "peak_load", "steady_t")}
+        self.ep = {k: z(N) for k in ("ret", "bounces", "apex_err", "lateral", "launch_t", "peak_load", "steady_t",
+                                     "first_apex", "first_dx")}
         self.tgt_steady, self.tgt_start, self.t_high = z(N), z(N), z(N)
         self.sched = torch.zeros(N, dtype=torch.bool, device=dev)
         self.sched_any = c.target_sched_p > 0
@@ -756,6 +760,8 @@ class BounceEnv:
             v[ids] = 0.0
         self.ep["launch_t"][ids] = float("nan")
         self.ep["steady_t"][ids] = float("nan")
+        self.ep["first_apex"][ids] = float("nan")
+        self.ep["first_dx"][ids] = float("nan")
         if self.forced is not None and self.forced.get("post_reset") is not None:
             self.forced["post_reset"](self, ids)                  # evaluation: set any per-episode state directly
 
@@ -816,7 +822,8 @@ class BounceEnv:
         goal = torch.where(glitch[:, None], self.goal_prev, goal)
         self.goal_prev = goal
         delay = (self.delay_sub + (self._u(self.N) * (self.ctrl_jit + 1).float()).floor().long()).clamp(0, CMD_RING - 2)
-        ev = {k: torch.zeros(self.N, device=self.device) for k in ("apex", "hit", "n_hit", "n_apex", "first", "tilt_hit")}
+        ev = {k: torch.zeros(self.N, device=self.device) for k in ("apex", "hit", "n_hit", "n_apex", "first", "tilt_hit",
+                                                                    "back")}
         load_pen = torch.zeros(self.N, device=self.device)
         ar = torch.arange(self.N, device=self.device)
         fk = self.kin.forward(self.q)
@@ -912,6 +919,11 @@ class BounceEnv:
             self.ep["steady_t"] = torch.where(st_hit, self.t, self.ep["steady_t"])
             first = good & torch.isnan(self.ep["launch_t"])
             self.ep["launch_t"] = torch.where(first, self.t, self.ep["launch_t"])
+            dxf = self.p_ball[:, 0] - self.home_env[:, 0]                # + = away from the base
+            self.ep["first_apex"] = torch.where(first, self.p_ball[:, 2] - B.RADIUS - self.home_env[:, 2],
+                                                self.ep["first_apex"])                # above the paddle's home
+            self.ep["first_dx"] = torch.where(first, dxf, self.ep["first_dx"])
+            ev["back"] += first * (-dxf).clamp(min=0)
             self.prev_vz = vz
             self._camera()
         self.steps += 1
@@ -933,6 +945,8 @@ class BounceEnv:
             r["tilt_contact"] = -c.w_tilt_contact * ev["tilt_hit"]
         if c.w_first or c.w_wait:                    # get to the target height quickly, from a dead stop too
             r["launch"] = c.w_first * ev["first"] - c.w_wait * self.dt * (~self.on_target).float()
+        if c.w_back:                                 # launch forward or straight up, not toward the handle
+            r["back"] = -c.w_back * ev["back"]
         # termination
         rel = self.p_ball - self.home_env
         po = fk["paddle_o"] - self.home_env
@@ -941,7 +955,11 @@ class BounceEnv:
                              else float(self.forced["ceiling"]))
         if c.ceiling_after_land:                                  # high drops start above the ceiling
             above = above & self.landed
-        conds = [self.p_ball[:, 2] < fk["paddle_o"][:, 2] - 0.04,
+        lost = self.p_ball[:, 2] < fk["paddle_o"][:, 2] - 0.04
+        if c.handle_keepout > 0:
+            lost = lost | ((self.p_ball[:, 0] - fk["paddle_o"][:, 0] < -c.handle_keepout) & (self.rest_time <= 0)
+                           & (self.p_ball[:, 2] < fk["paddle_o"][:, 2] + 0.04))
+        conds = [lost,
                  above | (lateral > c.max_lateral),
                  (po[:, :2].abs() > c.paddle_box[0]).any(-1) | (po[:, 2].abs() > c.paddle_box[1]) | (tilt > c.max_tilt),
                  self.overload_time > self.overload_limit,

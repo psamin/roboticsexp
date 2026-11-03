@@ -446,3 +446,37 @@ v21_p32_any10:
     toss_full_p: 0.8
     push_full_p: 0.5
     paddle_box: [0.12, 0.10]
+# Round 15 (2026-11-02): servo set fitted to the real speed test plus the 2026-11-01 real-ball logs (12v_r11: ~3.3 N m
+# torque cap, more rotor inertia; 12v_r10 had 1.75). On 12v_r11 the round-10 launch stroke lifts the paddle ~8 cm (real
+# arm 10.5 cm), past the 6 cm paddle limit, so the limit is 10 cm as in v21_p32_any10. From v16-p32-lo.
+v22_p32_r11:
+  env:
+    <<: *v16env
+    servo_variant: "12v_r11"
+    p_gain: 32.0
+    target_apex: [0.07, 0.10]
+    paddle_box: [0.12, 0.10]
+# Round 15b (2026-11-02): the policy launches from rest by itself (no scripted launch replayed): 70 % resting starts,
+# a ball coming down near paddle height more than 6 cm behind the paddle centre (on the handle) is lost, first-apex
+# drift toward the handle costs w_back per m, restitution weighted to 0.55-0.75 (the user's new paddle is unmeasured,
+# the old one ~0.6), 10 cm paddle limit. On the real arm the r10 flick threw the ball ~14 cm back onto the handle.
+v23_p32_learn:          # from v18-p32-t12 (already launches itself), servo set 12v_r11
+  env: &v23env
+    <<: *v16env
+    servo_variant: "12v_r11"
+    p_gain: 32.0
+    target_apex: [0.08, 0.12]
+    paddle_box: [0.12, 0.10]
+    launch_replay_p: 0.0
+    rest_start_prob: 0.7
+    handle_keepout: 0.06
+    w_back: 10.0
+    rubbers: [[0.15, [0.84, 0.92], [0.30, 0.60]], [0.10, [0.78, 0.86], [0.12, 0.30]], [0.15, [0.72, 0.82], [0.08, 0.20]],
+              [0.60, [0.55, 0.75], [0.15, 0.45]]]
+v23_p32_learn_w:        # the same on the wide servo set (r10 cap up to the speed-test fit)
+  env:
+    <<: *v23env
+    servo_variant: "12v_r11w"
+v23_p32_learn16:        # the same as v23_p32_learn, from v16-p32-lo
+  env:
+    <<: *v23env

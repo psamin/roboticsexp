@@ -275,11 +275,11 @@ def main():
                     over = len(rel) == 2 and all(np.hypot(r[0], r[1]) < START_LATERAL and -0.05 < r[2] < 0.5 for r in rel)
                     if over and ignore is not None and np.hypot(*(rel[-1][:2] - ignore[:2])) < 0.02:
                         over = False                                   # the static blob found earlier
-                    if over and launch and all(abs(r[2]) < 0.04 for r in rel):   # being set down, not dropped in:
+                    if over and all(abs(r[2]) < 0.04 for r in rel):          # being set down, not dropped in:
                         settle = [(x[1] - home).numpy() for x in ro.det if now - x[0] < 0.25]   # wait until it sits
                         if len(settle) < 6 or np.ptp(np.array(settle)[:, :2], 0).max() > 0.015:   # still, then flick
                             over = False
-                    elif over and launch:                      # above the paddle: start only for a ball really dropped
+                    elif over:                                 # above the paddle: start only for a ball really dropped
                         t2 = [x[0] for x in ro.det if now - x[0] < START_GAP_S][-2:]   # in (falling), not one still
                         vz = (rel[1][2] - rel[0][2]) / max(t2[1] - t2[0], 1e-3)        # in the hand
                         if vz > -0.5:

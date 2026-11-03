@@ -29,8 +29,8 @@ from bounce.ppo import PPO
 
 INTERFACE = ("ctrl_hz", "substeps", "history", "cam_k", "episode_s", "p_gain", "action_scale", "nominal_lift",
              "nominal_elbow", "paddle_box")       # paddle_box: a higher launch's strike may rise 8-10 cm
-DELAY = {"12v_r10": (18.0, 5.0, 35.0), "12v_r10w": (18.0, 5.0, 35.0), "12v_r8": (18.0, 5.0, 35.0), "12v": (30.0, 8.0, 40.0),
-         "5v": (8.0, 4.0, 40.0)}
+DELAY = {"12v_r11": (18.0, 5.0, 35.0), "12v_r11w": (18.0, 5.0, 35.0), "12v_r10": (18.0, 5.0, 35.0),
+         "12v_r10w": (18.0, 5.0, 35.0), "12v_r8": (18.0, 5.0, 35.0), "12v": (30.0, 8.0, 40.0), "5v": (8.0, 4.0, 40.0)}
 REAL_CAM = (-0.068, 0.012, 0.732)          # real/camera_calib.json, 2026-10-31
 REAL_CAM_BASE_MS = (14.0, 8.0, 50.0)       # + 1.5 frames at 30 fps = 64 ms: 62 ms measured capture-to-read + finder
 
@@ -289,6 +289,12 @@ def main():
                     "the --targets value is the steady target")
     ap.add_argument("--auto_level", action="store_true", help="the runner's --auto-level wrist trim (EnvCfg.auto_level)")
     ap.add_argument("--ci", action="store_true", help="also print the 95 %% interval of each survival rate")
+    ap.add_argument("--keepout", type=float, default=0.0, help="m: ball off the paddle this far behind its centre "
+                    "near paddle height is lost (EnvCfg.handle_keepout)")
+    ap.add_argument("--launch_lean", type=float, default=0.0, help="deg of wrist flex added to the scripted strike "
+                    "(the runner's --launch-lean)")
+    ap.add_argument("--paddle_box", default="", help="xy,z paddle limit (m) for every checkpoint, e.g. 0.12,0.10 "
+                    "(default: each checkpoint's own)")
     ap.add_argument("--al_gain", type=float, default=None, help="auto-level gain (EnvCfg.al_gain)")
     ap.add_argument("--al_alpha", type=float, default=None, help="auto-level EMA weight per detection")
     ap.add_argument("--camera", default="real", choices=["real", "trained"],
@@ -298,6 +304,19 @@ def main():
     trained = {k: tuple(v) if isinstance(v, list) else v for k, v in (extra.get("config") or {}).get("env", {}).items()
                if k in EnvCfg.__dataclass_fields__}
     cfg = {k: trained[k] for k in INTERFACE if k in trained}    # same test setup for every checkpoint
+    if a.paddle_box:
+        cfg["paddle_box"] = tuple(float(x) for x in a.paddle_box.split(","))
+    if a.keepout:
+        cfg["handle_keepout"] = a.keepout
+    if a.launch_lean:                                       # every use of the scripted launch below gets the lean
+        get0, sc = LAUNCH.get, float(cfg.get("action_scale", EnvCfg().action_scale)[3])
+
+        def get_lean(p, name=""):
+            lp = get0(p, name)
+            st = list(lp.strike)
+            st[2] += math.radians(a.launch_lean) / sc
+            return LAUNCH.Launch(**{**lp.as_dict(), "strike": tuple(st)})
+        LAUNCH.get = get_lean
     probe = BounceEnv(EnvCfg(**{**cfg, "num_envs": 1, "device": "cpu"}))
     rows = build_rows(probe, a.launch)
     if a.only:
@@ -387,7 +406,7 @@ def main():
             slot = torch.div(s["env_id"].long(), E, rounding_mode="floor")
             print(f"\ndifficulty {d}" + ("" if tgt is None else f", target apex {100 * tgt:.0f} cm"))
             print(f"{'scenario':46s} {'survive':>7} {'bounces':>7} {'apex err':>8} {'1st bounce':>10} {'peak load':>9}  "
-                  f"{'steady (share, s)':>17}  main failure")
+                  f"{'steady (share, s)':>17}  {'1st apex':>8} {'x p10':>6}  main failure")
             for i, (name, _, _, _) in enumerate(rows):
                 m = slot == i
                 sv, bo = s["survived"][m], s["bounces"][m]
@@ -400,10 +419,15 @@ def main():
                 stt = s["steady_t"][m] if "steady_t" in s else torch.full_like(sv, float("nan"))
                 got = ~torch.isnan(stt)
                 st_med = float(stt[got].median()) if bool(got.any()) else float("nan")
+                fa, fx = s["first_apex"][m], s["first_dx"][m]
+                ok1 = ~torch.isnan(fa)
+                fa_med = 100 * float(fa[ok1].median()) if bool(ok1.any()) else float("nan")
+                fx_p10 = 100 * float(fx[ok1].quantile(0.1)) if bool(ok1.any()) else float("nan")
                 ci = f" +-{100 * 1.96 * math.sqrt(max(float(sv.mean()) * (1 - float(sv.mean())), 1e-4) / sv.numel()):.0f}" \
                     if a.ci else ""
                 print(f"{name:46s} {100 * float(sv.mean()):6.0f}%{ci} {float(bo.mean()):7.1f} {ae:7.1f}cm {t1:9.2f}s "
-                      f"{float(s['peak_load'][m].mean()):9.2f}  {100 * float(got.float().mean()):6.0f}% {st_med:6.2f}s  {mf}",
+                      f"{float(s['peak_load'][m].mean()):9.2f}  {100 * float(got.float().mean()):6.0f}% {st_med:6.2f}s  "
+                      f"{fa_med:6.1f}cm {fx_p10:+5.1f}  {mf}",
                       flush=True)
 
 

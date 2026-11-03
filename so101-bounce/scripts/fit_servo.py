@@ -113,6 +113,17 @@ def sq_err(sim, q, fast):
     return e2.sum(1), (e2 * fast[None, 1:, :]).sum(1)
 
 
+def lag_ms(t, goal, q, j):
+    """Lag (ms) maximising the correlation of goal and joint velocity for joint j, on a 2 ms grid."""
+    tg = np.arange(t[0], t[-1], 0.002)
+    g = np.gradient(np.interp(tg, t, goal[:, j]), tg)
+    m = np.gradient(np.interp(tg, t, q[:, j]), tg)
+    if np.std(g) < 1e-9 or np.std(m) < 1e-9:
+        return float("nan")
+    c = [np.corrcoef(g[:len(g) - k], m[k:])[0, 1] for k in range(100)]
+    return 2.0 * int(np.argmax(c))
+
+
 def sample(n, box, gen):
     return {k: torch.exp(np.log(lo) + (np.log(hi) - np.log(lo)) * torch.rand(n, generator=gen)) for k, (lo, hi) in box.items()}
 
@@ -126,8 +137,12 @@ def main():
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--fix", action="append", default=[], help="name=value: hold one of the fitted parameters fixed")
+    ap.add_argument("--box", action="append", default=[], help="name=lo:hi: fit this parameter in this range "
+                    "(adds a servo parameter such as i_max, or overrides a default range)")
+    ap.add_argument("--base_delay", type=float, default=18.0, help="command delay (ms) for the base set's baseline")
     a = ap.parse_args()
     fixed = {k: float(v) for k, v in (f.split("=") for f in a.fix)}
+    BOX.update({k: tuple(float(x) for x in v.split(":")) for k, v in (b.split("=") for b in a.box)})
     logs = []
     for path in a.logs:
         t, q, goal, q_ref, p_gain = load(path)
@@ -162,6 +177,11 @@ def main():
     o0 = evaluate(nom, SERVO_VARIANTS["12v"])
     print(f"current 12 V model (round 7 nominal): rms {total(o0)[0]:.2f} deg")
     report("12v", o0, 0)
+    nb = {k: torch.tensor([v[0]]) for k, v in base.items()}
+    nb["delay_ms"], nb["vin"] = torch.tensor([a.base_delay]), torch.tensor([a.vin])
+    ob = evaluate(nb, base)
+    print(f"{a.base} nominal, delay {a.base_delay:.0f} ms, vin {a.vin}: rms {total(ob)[0]:.2f} deg")
+    report(a.base, ob, 0)
     gen = torch.Generator().manual_seed(0)
     box = {k: v for k, v in BOX.items() if k not in fixed}
     best = None
@@ -183,6 +203,13 @@ def main():
     print(f"fitted: rms {r:.2f} deg")
     report("fit", out, i)
     print(json.dumps({k: round(v, 4) for k, v in p.items()}))
+    fit = {k: torch.tensor([v]) for k, v in p.items() if k not in ("stall_Nm", "no_load_rad_s")}
+    print("lag goal -> joint (ms), lift / elbow / wrist flex: real | base nominal | fitted")
+    for name, t, q, goal, q_ref, p_gain, fast in logs:
+        sb = replay(nb, t, goal, q[0], q_ref, p_gain, base, device=a.device)[0].numpy()
+        sf = replay(fit, t, goal, q[0], q_ref, p_gain, base, device=a.device)[0].numpy()
+        row = [[lag_ms(t, goal, x, j) for j in (1, 2, 3)] for x in (q, sb, sf)]
+        print(f"  {name}: " + " | ".join("/".join(f"{v:.0f}" for v in r) for r in row))
 
 
 if __name__ == "__main__":

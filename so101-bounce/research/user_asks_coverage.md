@@ -192,3 +192,68 @@ v19-p32-tilt: camera latency, 15 fps).
 **Deploy stays** `policies/v16-p32-lo.pt --launch --target-cm 9 --auto-level`. Runner-up: `policies/v21-p32-any10.pt`
 (same flags): no regression on the round-10 rows at difficulty 0, +6 to +8 on launched / dead-paddle starts at 0.5, but
 -5 on 40 cm drops and -3 at 3 deg tilt at 0.5.
+
+## Round 15 (2026-11-02): servo fit from the speed test, learned launch
+
+**Servo fit.** The real/speed_test.py log covers the round-10 launch stroke and elbow steps at P32, with goals rebuilt by
+scripts/speed_to_runlog.py. It was fitted together with 9 real-ball logs from 2026-11-01. scripts/fit_servo.py
+(jobs 13465-67) had kt, R, armature, command delay, speed limit and i_max free.
+
+| | rms, all logs (deg) | elbow on fast strokes (deg) | launch stroke paddle peak |
+|---|---|---|---|
+| 12v_r10 nominal, 18 ms | 0.75 | 2.03 | 2.7 cm at 212 ms |
+| fit to all logs = `12v_r11` | 0.55 | 1.03 | 7.7 cm at 214 ms |
+| fit to the speed test only | (0.66 vs 1.42 on it) | | 9.2 cm at 225 ms |
+| real arm | | | 10.5 cm at 256 ms |
+
+The command delay fits at 14-35 ms. The ~100 ms goal-to-joint lag seen on the arm is inertia and the current limit,
+not delay. The torque cap (kt x i_max) is ~3.3 N m against 1.75 in r10, and the armature is 0.07-0.10 against 0.046.
+`12v_r11w` widens the ranges from the r10 cap up to the speed-test fit.
+
+**Round-10 flick on 12v_r11.** The paddle rises past the old 6 cm paddle limit, so from here the limit is 10 cm; the real
+arm has none. With that limit the first apex is 10.8 cm, but the ball is thrown toward the handle:
+
+| Servo set, difficulty | x drift at the first apex | Lost |
+|---|---|---|
+| r11, 0 | -2.2 cm | |
+| r11, 0.5 | -2.6 cm median, p10 -5.0 | 38 %, counting a 6 cm handle keep-out |
+| r10, 0 | -0.3 cm | |
+
+The real arm throws the same way but further (-10 to -17 cm). A wrist-flex lean on the strike halves the backward
+drift by 6 deg and costs height: 10.8 -> 6.4 cm on r11, -1.0 cm drift.
+
+A launch retuned with a back-drift penalty and the keep-out (scripts/tune_launch.py --back_w 10 --keepout 0.06,
+job 13475) gives +0.5 cm drift on r11. It fails on r10 (lands 10 cm forward) and on 12v (paddle past 10 cm), so it was
+not adopted.
+
+**v22-p32-r11** (the scripted-launch policy fine-tuned on 12v_r11) is the same as v16-p32-lo on r11 within noise,
+over 75 rows. At difficulty 0.5 both survive ~50 % on r11 and on r10 alike.
+
+**Learned launch.** The v23 variants have no scripted launch, 70 % rest starts, the handle keep-out, w_back 10 and
+restitution weighted to 0.55-0.75. Each fine-tune ran 65 min:
+- `v23-p32-learn`: from v18-p32-t12, on 12v_r11;
+- `-learn-w`: the same on 12v_r11w;
+- `-learn16`: from v16-p32-lo, on 12v_r11.
+
+They were evaluated on 12v_r11 with auto-level, the keep-out on, a 10 cm target and 1024 episodes per row (about +-3
+points). Survival at difficulty 0, with time to the steady bounce:
+
+| Start | v16-p32-lo, scripted launch, lean 6 | v18-p32-t12 | v23-learn16 | v23-learn-w |
+|---|---|---|---|---|
+| rest centre | 99 %, 1.63 s | 95 %, 1.29 s | 99 %, 1.14 s | 98 %, 1.06 s |
+| rest half-way | 98 %, 1.90 s | 96 %, 1.68 s | 98 %, 1.31 s | 98 %, 1.24 s |
+| rest near rim | 75 % | 84 % | 85 % | 85 % |
+| rest rolling 0.2 m/s | 79 % | 82 % | 88 % | 87 % |
+| near rim, rolling | 60 % | 71 % | 75 % | 74 % |
+| drop 40 cm | 31 % | 6 % | 65 % | 27 % |
+
+- The learned launches dribble the ball up: the first apex is ~4 cm above home and the steady bounce follows by
+  1.1-1.3 s.
+- The x drift p10 on rest starts (-1 to -3 cm) is the same as v18-p32-t12: w_back changed little.
+- Costs against v18-p32-t12: 2 deg tilt 67 -> 60 %, 3 deg 36 -> 30 %.
+- At difficulty 0.5 everything is within noise of v18-p32-t12 on 12v_r11 and 12v_r11w, except drops (40 cm 10 ->
+  21-27 %).
+- The keep-out is strict (x < -6 cm still includes the rear blade rim), which is why the 40 cm drop is low for all.
+
+**Deploy (learned launch):** `policies/v23-p32-learn16.pt --target-cm 10 --auto-level`, no `--launch`. Runner-up:
+`policies/v23-p32-learn-w.pt`.

@@ -75,8 +75,26 @@ SERVO_RANGES_12V_R10 = {
 }
 # Wide: everything from the round-8 behaviour (no torque cap, 5 rad/s) down to the round-10 cap, for robustness.
 SERVO_RANGES_12V_R10W = {**SERVO_RANGES_12V_R10, "max_velocity": (4.0, 2.0, 5.3), "i_max": (0.75, 0.5, 3.0)}
+# Round 15: fitted (scripts/fit_servo.py, jobs 13465-13467) to the 2026-11-02 speed test (real/speed_test.py: launch
+# strokes and elbow steps at P32) plus the 2026-11-01 real-ball logs, with i_max free: rms 0.55 deg (12v_r10 nominal
+# 0.75; elbow on fast strokes 1.03 vs 2.03). The torque cap is ~3.3 N m (kt * i_max), not 1.75, with more rotor
+# inertia: the round-10 launch stroke lifts the paddle 7.7 cm in the model (real 10.5 cm, 12v_r10 2.7 cm). The command
+# delay fits at 14-35 ms, inside act_delay_ms; the ~100 ms goal-to-joint lag is inertia and the current limit.
+# Ranges span the three fits (all logs / speed test only / real-ball logs only).
+SERVO_RANGES_12V_R11 = {
+    **SERVO_RANGES_12V_R10,
+    "kt": (3.26, 2.6, 3.6),
+    "R": (3.93, 2.3, 4.6),
+    "armature": (0.100, 0.07, 0.13),
+    "max_velocity": (2.6, 2.2, 3.8),
+    "i_max": (1.0, 0.8, 1.6),
+}
+# Wide: the r11 nominal, with ranges reaching down to the round-10 torque cap and up to the speed-test-only fit.
+SERVO_RANGES_12V_R11W = {**SERVO_RANGES_12V_R11, "kt": (3.26, 2.0, 3.6), "R": (3.93, 2.3, 5.0),
+                         "armature": (0.100, 0.04, 0.13), "max_velocity": (2.6, 2.2, 4.5), "i_max": (1.0, 0.65, 1.6)}
 SERVO_VARIANTS = {"5v": SERVO_RANGES, "12v": SERVO_RANGES_12V, "12v_r8": SERVO_RANGES_12V_R8,
-                  "12v_r10": SERVO_RANGES_12V_R10, "12v_r10w": SERVO_RANGES_12V_R10W}
+                  "12v_r10": SERVO_RANGES_12V_R10, "12v_r10w": SERVO_RANGES_12V_R10W, "12v_r11": SERVO_RANGES_12V_R11,
+                  "12v_r11w": SERVO_RANGES_12V_R11W}
 
 
 class ServoBank:
