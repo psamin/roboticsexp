@@ -130,6 +130,9 @@ def lock_camera(cam, cc: dict):
     while time.perf_counter() < t_end:
         cam.get()
         time.sleep(0.05)
+    if not u.get("lock", True):                                # config: leave the camera on its own automatic settings
+        print("camera on automatic exposure, white balance and focus")
+        return None
     settled = {n: get(n) for n in ("exposure-time-abs", "gain", "white-balance-temp", "focus-abs")}
     if settled["exposure-time-abs"] is None:
         print(f"note: uvc-util could not read the camera ({' '.join(base)}); exposure stays automatic")
