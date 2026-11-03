@@ -130,8 +130,10 @@ def lock_camera(cam, cc: dict):
     while time.perf_counter() < t_end:
         cam.get()
         time.sleep(0.05)
-    if not u.get("lock", True):                                # config: leave the camera on its own automatic settings
-        print("camera on automatic exposure, white balance and focus")
+    if not u.get("lock", True):                                # config: automatic exposure and white balance, but focus
+        focus = get("focus-abs")                               # locked where autofocus settled (no hunting mid-run)
+        subprocess.run(base + ["-s", "auto-focus=0", "-s", f"focus-abs={focus}"], capture_output=True, text=True, timeout=5)
+        print(f"camera on automatic exposure and white balance; focus locked at {focus}")
         return None
     settled = {n: get(n) for n in ("exposure-time-abs", "gain", "white-balance-temp", "focus-abs")}
     if settled["exposure-time-abs"] is None:
