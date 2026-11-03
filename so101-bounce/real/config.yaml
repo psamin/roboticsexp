@@ -6,7 +6,7 @@ leader_calibration: calibration/so_leader/my_leader.json
 use_gripper: false       # false = paddle zip-tied/taped into the jaws: the gripper servo (ID 6) is left out entirely
 # Simulator angle = sign * (LeRobot degrees - offset_deg). Wrist offsets fitted 2026-10-31 from the taped paddle
 # levelled by hand (roll 96: the paddle sits ~90 deg around the handle from the model's mount; flex 13: tape pitch).
-joint_map: {sign: [1, 1, 1, 1, 1], offset_deg: [0.0, 0.0, 0.0, 8.4, 93.5]}
+joint_map: {sign: [1, 1, 1, 1, 1], offset_deg: [0.0, 0.0, 0.0, 10.8, 92.5]}
 ball_colour: white      # the ball in use (white or orange): the camera finder looks for this colour
 cameras:
   overhead: {name: "HD Pro Webcam C920", uvc: {vid_pid: "0x046d:0x08e5", lock: false}, index: 0, width: 640, height: 480, fps: 30}   # Logitech C920, mounted behind the base (Dream-1 layout)
