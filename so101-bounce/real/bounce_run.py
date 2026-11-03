@@ -279,6 +279,11 @@ def main():
                         settle = [(x[1] - home).numpy() for x in ro.det if now - x[0] < 0.25]   # wait until it sits
                         if len(settle) < 6 or np.ptp(np.array(settle)[:, :2], 0).max() > 0.015:   # still, then flick
                             over = False
+                    elif over and launch:                      # above the paddle: start only for a ball really dropped
+                        t2 = [x[0] for x in ro.det if now - x[0] < START_GAP_S][-2:]   # in (falling), not one still
+                        vz = (rel[1][2] - rel[0][2]) / max(t2[1] - t2[0], 1e-3)        # in the hand
+                        if vz > -0.5:
+                            over = False
                     if over:
                         old, ro = ro, new_obs()               # fresh history; keep the detections already seen
                         ro.joints(q)
