@@ -273,6 +273,9 @@ def main():
                 if state == "armed":
                     rel = [(x[1] - home).numpy() for x in ro.det if now - x[0] < START_GAP_S][-2:]
                     over = len(rel) == 2 and all(np.hypot(r[0], r[1]) < START_LATERAL and -0.05 < r[2] < 0.5 for r in rel)
+                    if ignore is not None and not any(np.hypot(*((x[1] - home).numpy()[:2] - ignore[:2])) < 0.02
+                                                      for x in ro.det if now - x[0] < 1.0):
+                        ignore = None                                  # that spot has been empty for 1 s
                     if over and ignore is not None and np.hypot(*(rel[-1][:2] - ignore[:2])) < 0.02:
                         over = False                                   # the static blob found earlier
                     if over and all(abs(r[2]) < 0.04 for r in rel):          # being set down, not dropped in:
