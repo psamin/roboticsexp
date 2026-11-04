@@ -271,3 +271,17 @@ The refit gains only 0.04 deg, and its parameters stay inside the r11 ranges (ar
 goal to joint for lift, elbow and wrist flex is 78-82, 78-122 and 84-118 ms on the arm, against 80-82, 94-102 and 120-122
 ms in r11. Wrist flex has the largest error, which fits its 1.2-1.6 deg of slack. The servo model does not need another
 round before the real test of v23-p32-learn16.
+
+**New paddle position.** On the 21:36 and 21:40 frames (arm holding, new paddle), real/camera_check.py draws the
+modelled blade 1.5-3.6 cm further out along the handle and ~1.5 cm right of the real one. The camera calibration
+(20:50) predates the new paddle. Failure analysis of v23-p32-learn16 at difficulty 0.5 (job 13646, 8192 episodes,
+16 % survive the full episode) says this does not matter:
+
+| Parameter | low third | middle | high third |
+|---|---|---|---|
+| paddle reach (model 130 mm) | 95-112 mm: 17 % | 18 % | 128-145 mm: 14 % |
+| camera bias | 1-11 mm: 17 % | 16 % | 14-21 mm: 16 % |
+| restitution e0 | 0.55-0.66: 21 % | 16 % | 0.76-0.92: 12 % |
+
+`paddle_offset_cm` in real/config.yaml stays at 0. Restitution is the largest factor; the new paddle's is unmeasured
+(old paddle ~0.6), so the next session starts with real/drop_test.py.
