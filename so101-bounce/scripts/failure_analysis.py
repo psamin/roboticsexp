@@ -46,7 +46,7 @@ def main():
         "load friction (mean)": sp["load_fric"].mean(1), "supply sag ohm": sp["supply_r"][:, 0],
         "USB glitch rate": env.glitch_p_env, "table tilt deg": torch.rad2deg(torch.acos(-env.g_env[:, 2] / 9.81)),
         "wind m/s": env.wind.norm(dim=-1), "paddle vibration deg": torch.rad2deg(env.pj_std),
-        "blade half-length mm": env.blade[:, 0] * 1000,
+        "blade half-length mm": env.blade[:, 0] * 1000, "paddle reach mm": env.reach_env * 1000,
         "camera bias mm": env.cam_bias.norm(dim=-1) * 1000, "restitution e0": env.ball_prm["e0"],
         "friction mu": env.ball_prm["mu"], "paddle mass g": env.kin.mass[:, env.kin.paddle] * 1000,
         "joint offset deg (max)": torch.rad2deg(env.q_off.abs().max(1).values),

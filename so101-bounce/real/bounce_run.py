@@ -28,7 +28,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import arm as A                                                    # noqa: E402
-from rig import BALL_RADIUS, CAMERA_CALIB as rig_calib, CONFIG, BallFinder, Camera, CameraModel, camera_index, lock_camera, _jmap as rig_jmap, deg_to_sim, sim_to_deg   # noqa: E402
+from rig import BALL_RADIUS, CAMERA_CALIB as rig_calib, CONFIG, BallFinder, Camera, CameraModel, camera_index, lock_camera, _jmap as rig_jmap, deg_to_sim, shift_paddle, sim_to_deg   # noqa: E402
 from bounce import ball as B                                       # noqa: E402
 from bounce.env import EnvCfg                                      # noqa: E402
 from bounce import launch as LAUNCH                                # noqa: E402
@@ -154,7 +154,7 @@ def main():
             print(f"launch strike leans {a.launch_lean:+.1f} deg forward")
         launch = list(LAUNCH.actions(lp)[:, 0].numpy())         # the same actions the simulator ran
     launch_q, t_launched, relaunches = [], None, 0
-    kin = ArmKinematics(build_model(), 1)
+    kin = shift_paddle(ArmKinematics(build_model(), 1))
     lower, upper = kin.lower.numpy() + 0.02, kin.upper.numpy() - 0.02
     hold = json.loads(A.HOLD.read_text())
     print(f"policy {a.checkpoint}: {hz:.0f} Hz, P gain {p_gain}, history {cfg.history}, detections {cfg.cam_k}")

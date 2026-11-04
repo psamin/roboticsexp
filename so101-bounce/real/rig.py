@@ -43,6 +43,15 @@ def sim_to_deg(q) -> dict:
     return {n: float(v) for n, v in zip(ARM, d)}
 
 
+def shift_paddle(kin):
+    """Move the model's blade centre to where the real blade sits in the jaws (config paddle_offset_cm)."""
+    off = CONFIG.get("paddle_offset_cm")
+    if off:
+        R = kin.paddle_rot[0]
+        kin.paddle_pos += 0.01 * (off[0] * R[:, 0] + off[1] * R[:, 1])
+    return kin
+
+
 # ------------------------------------------------------------------ camera
 def camera_index(cc: dict) -> int:
     """OpenCV index of a configured camera, looked up by its name. OpenCV numbers the connected video (and muxed)

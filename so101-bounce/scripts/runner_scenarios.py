@@ -267,7 +267,7 @@ def main():
     names = [n for n in sys.argv[2:sys.argv.index("--") if "--" in sys.argv else None]] or list(SCENARIOS)
     ecfg = (PPO.load(ck, "cpu", load_optimizer=False)[1].get("config") or {}).get("env", {})
     kw = {k: tuple(v) if isinstance(v, list) else v for k, v in ecfg.items() if k in EnvCfg.__dataclass_fields__}
-    env = BounceEnv(EnvCfg(**{**kw, "num_envs": 1, "device": "cpu", "servo_variant": "12v"}))   # the real arm
+    env = BounceEnv(EnvCfg(**{**kw, "num_envs": 1, "device": "cpu", "servo_variant": "12v_r11"}))   # the real arm
     env.forced = {"difficulty": 0.0, "rest_start": True}
     env.reset_all()
     hold = rig.sim_to_deg(env.q_nom.numpy())
