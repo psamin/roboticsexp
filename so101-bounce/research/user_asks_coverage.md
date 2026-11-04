@@ -257,3 +257,17 @@ points). Survival at difficulty 0, with time to the steady bounce:
 
 **Deploy (learned launch):** `policies/v23-p32-learn16.pt --target-cm 10 --auto-level`, no `--launch`. Runner-up:
 `policies/v23-p32-learn-w.pt`.
+
+**Held-out servo check (job 13645).** Three real-ball runs from 2026-11-02 (211014, 211329, 212306; 165 s in all) were not
+in the r11 fit. On them:
+
+| | rms, all joints (deg) | wrist flex on fast strokes (deg) |
+|---|---|---|
+| 12v (round 7) | 1.00 | 1.78 |
+| `12v_r11` nominal, 14 ms | 0.84 | 1.66 |
+| refit to these runs | 0.80 | 1.42 |
+
+The refit gains only 0.04 deg, and its parameters stay inside the r11 ranges (armature at the low edge, 0.070). Lag from
+goal to joint for lift, elbow and wrist flex is 78-82, 78-122 and 84-118 ms on the arm, against 80-82, 94-102 and 120-122
+ms in r11. Wrist flex has the largest error, which fits its 1.2-1.6 deg of slack. The servo model does not need another
+round before the real test of v23-p32-learn16.
