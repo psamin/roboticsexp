@@ -166,6 +166,7 @@ class EnvCfg:
     w_aim: float = 0.0                          # per hit: ball leaves at the velocity that reaches the target apex
     aim_sigma: float = 0.2                      # (vz = sqrt(2 g h)) and lands back on the centre; m/s
     w_track: float = 0.0                        # per s in flight: paddle centre under the ball's predicted landing point
+    w_edge: float = 0.0                         # per hit: (contact offset / blade semi-axis)^2, 0 at the centre, 1 at the rim
     handle_keepout: float = 0.0                 # m: a ball off the paddle this far behind its centre (-x) within 4 cm
                                                 # of paddle height is lost (it comes down on the handle); 0 = off
     # round 9
@@ -174,6 +175,12 @@ class EnvCfg:
     launch_jitter: float = 0.15                 # +- scale of the replayed launch; 30 % also one strike step more/less
     view_top: tuple = ()                        # (lo, hi) m above home: the real camera's top frame edge (the ball
     view_top_p: float = 0.0                     # leaves the C920's view ~12 cm up): no detections above it
+    cam_view: tuple = ()                        # the real overhead view (R_base_from_cam 9 values, t 3, focal px, width,
+    cam_view_p: float = 0.0                     # height; real/camera_calib.json): no detection outside the frame or the
+    cam_view_half: float = 0.14                 # runner's search window (rig.paddle_roi: home +-half sideways and
+    cam_view_back: float = 0.14                 # forward, -back toward the arm, z range above), drawn from the
+    cam_view_z: tuple = (-0.05, 0.30)           # calibration while the true camera is moved by
+    cam_view_jit: tuple = (0.02, 0.035)         # up to (m, rad) per episode (the mount moved ~2 cm / 2 deg in a day)
     beside_feasible: bool = False               # beside starts: offset grows with task difficulty, dropped from high
                                                 # enough for the arm to get there (fall time vs pan reach)
     toss_curriculum: bool = False               # toss sideways speed and spin grow with task difficulty
@@ -315,6 +322,8 @@ class BounceEnv:
         self.glitch_p_env, self.glitch_left = z(N), torch.zeros(N, dtype=torch.long, device=dev)
         self.ctrl_jit = torch.zeros(N, dtype=torch.long, device=dev)
         self.cam_R = torch.eye(3, device=dev).expand(N, 3, 3).clone()
+        self.view_R, self.view_t = torch.eye(3, device=dev).expand(N, 3, 3).clone(), z(N, 3)
+        self.view_roi, self.view_on = z(N, 4), torch.zeros(N, dtype=torch.bool, device=dev)
         self.blur, self.outlier_p_env, self.stamp_sd = z(N), z(N), z(N)
         self.rs_env = z(N)
         self.blade = torch.tensor([c.paddle.blade_a, c.paddle.blade_b, 2.2], device=dev).expand(N, 3).clone()
@@ -722,6 +731,20 @@ class BounceEnv:
         self.cam_bias[ids] = c.cam_bias * ds[:, None] * (2 * self._u(n, 3) - 1)
         ca = c.cam_rot_err * ds[:, None] * (2 * self._u(n, 3) - 1)
         self.cam_R[ids] = axis_angle(e[0], ca[:, 0]) @ axis_angle(e[1], ca[:, 1]) @ axis_angle(e[2], ca[:, 2])
+        if c.cam_view_p > 0:
+            R0 = torch.tensor(c.cam_view[:9], dtype=torch.float32, device=dev).reshape(3, 3)
+            t0 = torch.tensor(c.cam_view[9:12], dtype=torch.float32, device=dev)
+            f, W, H = c.cam_view[12:15]
+            h, b = c.cam_view_half, c.cam_view_back
+            d = torch.tensor([[dx, dy, dz] for dx in (-b, h) for dy in (-h, h) for dz in c.cam_view_z], device=dev)
+            pc = (self.home_env[ids][:, None] + d - t0) @ R0                      # R0^T (p - t0), (n, 8, 3)
+            u, v = f * pc[..., 0] / pc[..., 2] + W / 2, f * pc[..., 1] / pc[..., 2] + H / 2
+            self.view_roi[ids] = torch.stack([u.min(1).values.clamp(min=0), v.min(1).values.clamp(min=0),
+                                              u.max(1).values.clamp(max=W), v.max(1).values.clamp(max=H)], -1)
+            jr = c.cam_view_jit[1] * (2 * self._u(n, 3) - 1)
+            self.view_R[ids] = axis_angle(e[0], jr[:, 0]) @ axis_angle(e[1], jr[:, 1]) @ axis_angle(e[2], jr[:, 2]) @ R0
+            self.view_t[ids] = t0 + c.cam_view_jit[0] * (2 * self._u(n, 3) - 1)
+            self.view_on[ids] = self._u(n) < c.cam_view_p
         self.outlier_p_env[ids] = LL(c.outlier_p, ds)
         self.stamp_sd[ids] = LL(c.stamp_noise, ds)
         self.age_bias_env[ids] = c.age_bias * ds * (2 * self._u(n) - 1)
@@ -832,7 +855,7 @@ class BounceEnv:
         self.goal_prev = goal
         delay = (self.delay_sub + (self._u(self.N) * (self.ctrl_jit + 1).float()).floor().long()).clamp(0, CMD_RING - 2)
         ev = {k: torch.zeros(self.N, device=self.device) for k in ("apex", "hit", "n_hit", "n_apex", "first", "tilt_hit",
-                                                                    "back", "aim")}
+                                                                    "back", "aim", "edge")}
         load_pen = torch.zeros(self.N, device=self.device)
         ar = torch.arange(self.N, device=self.device)
         fk = self.kin.forward(self.q)
@@ -907,6 +930,8 @@ class BounceEnv:
             self.launch_z = torch.where(touch, self.p_ball[:, 2] - B.RADIUS, self.launch_z)
             ev["hit"] += real_hit * torch.exp(-(du ** 2 + dv_ ** 2) / 0.03 ** 2)
             ev["n_hit"] += real_hit.float()
+            if c.w_edge:
+                ev["edge"] += real_hit * ((du / self.blade[:, 0]) ** 2 + (dv_ / self.blade[:, 1]) ** 2)
             if c.w_aim:
                 vz_des = (2 * 9.81 * self.target_apex).sqrt()
                 v_xy_des = (-(self.p_ball[:, :2] - self.home_env[:, :2]) * 9.81 / (2 * vz_des)[:, None]).clamp(-0.5, 0.5)
@@ -963,6 +988,8 @@ class BounceEnv:
             r["back"] = -c.w_back * ev["back"]
         if c.w_aim:
             r["aim"] = c.w_aim * ev["aim"]
+        if c.w_edge:
+            r["edge"] = -c.w_edge * ev["edge"]
         if c.w_track:                                # ballistic landing point at the paddle's height
             vz = self.v_ball[:, 2]
             dz = (self.p_ball[:, 2] - B.RADIUS - fk["paddle_o"][:, 2]).clamp(min=0)
@@ -1063,6 +1090,12 @@ class BounceEnv:
             (near & (self._u(n) < self.occl_p)) | ((streak > 0.03) & (self._u(n) < self.blurmiss_p))
         if self.cfg.view_top_p > 0:                  # above the camera's top frame edge
             miss = miss | ((p[:, 2] - self.home_env[:, 2]) > self.view_top_env)
+        if self.cfg.cam_view_p > 0:                  # outside the real frame or the runner's search window
+            f, W, H = self.cfg.cam_view[12:15]
+            pc = ((p - self.view_t)[:, None] @ self.view_R)[:, 0]
+            u, v = f * pc[:, 0] / pc[:, 2] + W / 2, f * pc[:, 1] / pc[:, 2] + H / 2
+            r = self.view_roi
+            miss = miss | (self.view_on & ((u < r[:, 0]) | (u > r[:, 2]) | (v < r[:, 1]) | (v > r[:, 3])))
         seen = due & ~miss
         if self.held_on:
             hold = self.hold_left > 0

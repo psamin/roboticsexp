@@ -502,13 +502,17 @@ v24_p32_dense:          # the same plus dense terms: each hit sends the ball at 
     w_aim: 1.0
     w_track: 0.5
 v24_p32_reach:          # dense terms plus reach: the arm chases balls landing anywhere on or off the blade. Pan
-  train: *v24train      # +-0.5 rad is ~+-17 cm at the paddle (was +-0.2, ~7 cm); wider paddle box and loss radius,
-  env:                  # weaker pull home, more and farther beside drops at full range, 60 % of drops over the whole
-    <<: *v24env         # blade (the task level, stuck near 0.13, kept drops within ~3 cm of the centre). Resumed
-    action_scale: [0.50, 0.45, 0.45, 0.35, 0.30]       # with the actor rescaled (scripts/rescale_actions.py).
-    paddle_box: [0.22, 0.10]
-    max_lateral: 0.28
-    w_home: 0.2
+  train: &v24reachtrain # +-0.5 rad is ~+-17 cm at the paddle (was +-0.2, ~7 cm); wider paddle box and loss radius,
+    eval_suites: [nominal, moderate, user_hw, full]
+  env: &v24reach        # weaker pull home, more and farther beside drops at full range, 60 % of drops over the whole
+    <<: *v24env         # blade (the task level, stuck near 0.13, kept drops within ~3 cm of the centre); off-centre
+    action_scale: [0.50, 0.45, 0.45, 0.35, 0.30]     # hits cost up to 1.0 at the rim (w_edge; a bigger w_hit would
+    paddle_box: [0.22, 0.10]                         # pay low fast dribbles), rate and speed penalties halved; the
+    max_lateral: 0.28                                # real overhead view from the 2026-11-04 calibration with the
+    w_home: 0.2                                      # runner's search window widened to 0.20 m sideways and forward
+    w_edge: 1.0                                      # (the true camera moved up to 2 cm / 2 deg). Resumed with the
+    w_rate: 0.01                                     # actor rescaled (scripts/rescale_actions.py).
+    w_qd: 0.005
     beside_start_prob: 0.4
     beside_offset: [0.08, 0.25]
     beside_full_p: 0.5
@@ -516,3 +520,15 @@ v24_p32_reach:          # dense terms plus reach: the arm chases balls landing a
     flight_spread: 0.14
     w_aim: 1.0
     w_track: 1.0
+    view_top_p: 0.0
+    cam_view: [0.15837, -0.80796, 0.56755, -0.98726, -0.13863, 0.07814, 0.01554, -0.5727, -0.81962,
+               -0.10595, 0.00106, 0.781, 521.67, 640, 480]
+    cam_view_p: 0.9
+    cam_view_half: 0.20
+    cam_view_back: 0.14
+v24_p32_reach_sparse:   # ablation: the same without the dense aim / track terms
+  train: *v24reachtrain
+  env:
+    <<: *v24reach
+    w_aim: 0.0
+    w_track: 0.0
