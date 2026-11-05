@@ -535,3 +535,41 @@ v24_p32_reach_sparse:   # ablation: the same without the dense aim / track terms
     <<: *v24reach
     w_aim: 0.0
     w_track: 0.0
+# Round 17 (2026-11-05), from research/round16_critique.md: exploration had sat at the e^-5 clamp floor since round
+# 10 (zero gradient, ent_coef 0), so fine-tunes learned nothing new; the std reset of round 16 decayed to 0.036 in 15
+# min. Now a floor at std 0.05 and an entropy bonus. Apex reward width 6 cm (at 3 cm the 14-20 cm targets gave
+# ~exp(-5) from the policy's ~10 cm), targets 12-20 cm, no wait penalty (drops), restitution re-centred on the new
+# paddle's ~0.75-0.9 (bounce timing, 65 pairs), camera heights in flight scaled 0.7-1.0 (real ~0.79), scored at
+# difficulty 0 / 0.25 / 0.5 (the difficulty-1 suites all scored 0).
+v25_reach:
+  train: &v25train
+    eval_suites: [nominal, easy, moderate]
+  ppo: &v25ppo
+    ent_coef: 0.005
+    min_log_std: -3.0
+  env: &v25env
+    <<: *v24reach
+    apex_sigma: 0.06
+    target_apex: [0.12, 0.20]
+    w_wait: 0.0
+    rubbers: [[0.30, [0.80, 0.92], [0.30, 0.60]], [0.25, [0.74, 0.86], [0.12, 0.30]], [0.25, [0.68, 0.80], [0.08, 0.20]],
+              [0.20, [0.55, 0.72], [0.15, 0.45]]]
+    cam_height_gain: [0.7, 1.0]
+v25_reach_sparse:       # without the dense aim / track terms
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v25env
+    w_aim: 0.0
+    w_track: 0.0
+v25_drop:               # the round-15 action range and search window (no reach widening), everything else as v25_reach
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v25env
+    action_scale: [0.20, 0.30, 0.30, 0.35, 0.30]
+    paddle_box: [0.12, 0.10]
+    max_lateral: 0.18
+    w_home: 0.5
+    beside_offset: [0.08, 0.16]
+    cam_view_half: 0.14

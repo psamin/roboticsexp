@@ -41,13 +41,15 @@ def squash_log_prob(dist: Normal, u: torch.Tensor) -> torch.Tensor:
 
 
 class SquashedGaussianActor(nn.Module):
-    def __init__(self, obs_dim: int, act_dim: int, hidden=(128, 128), init_std: float = 0.5):
+    def __init__(self, obs_dim: int, act_dim: int, hidden=(128, 128), init_std: float = 0.5,
+                 log_std_min: float = LOG_STD_MIN):
         super().__init__()
         self.mean = mlp(obs_dim, tuple(hidden), act_dim, out_gain=0.01)
         self.log_std = nn.Parameter(torch.full((act_dim,), math.log(init_std)))
+        self.log_std_min = log_std_min                     # exploration floor: below it the clamp has no gradient
 
     def dist(self, obs: torch.Tensor) -> Normal:
-        log_std = self.log_std.clamp(LOG_STD_MIN, LOG_STD_MAX)
+        log_std = self.log_std.clamp(self.log_std_min, LOG_STD_MAX)
         return Normal(self.mean(obs), log_std.exp().expand(obs.shape[0], -1))
 
     def sample(self, obs: torch.Tensor):

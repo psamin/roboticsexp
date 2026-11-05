@@ -12,6 +12,8 @@ SUITES = {
     "launch": {"difficulty": 1.0, "rest_start": True},                     # every episode starts with the ball at rest
     "off_center": {"difficulty": 1.0, "rest_start": True, "rest_radius": 0.65},   # resting 55-75 % out to the rim
 }
+# opt-in through train.eval_suites (not in the default score)
+EXTRA_SUITES = {"easy": {"difficulty": 0.25, "rest_start": None, "side_cam": False}}
 
 
 @torch.no_grad()

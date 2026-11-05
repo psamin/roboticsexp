@@ -24,6 +24,7 @@ class PPOConfig:
     lr_bounds: tuple = (1e-5, 1e-3)
     hidden: tuple = field(default_factory=lambda: (128, 128))
     init_std: float = 0.5
+    min_log_std: float = -5.0                  # exploration floor (std e^-5 = 0.0067)
 
 
 def clipped_surrogate(new_logp, old_logp, adv, clip: float):
@@ -45,7 +46,7 @@ class PPO:
         """critic_dim: size of the critic's input when it gets privileged observations (asymmetric actor-critic)."""
         self.cfg, self.device = cfg, torch.device(device)
         self.obs_dim, self.act_dim, self.critic_dim = obs_dim, act_dim, critic_dim or obs_dim
-        self.actor = SquashedGaussianActor(obs_dim, act_dim, cfg.hidden, cfg.init_std).to(self.device)
+        self.actor = SquashedGaussianActor(obs_dim, act_dim, cfg.hidden, cfg.init_std, cfg.min_log_std).to(self.device)
         self.critic = Critic(self.critic_dim, cfg.hidden).to(self.device)
         self.lr = cfg.lr
         self.opt = torch.optim.Adam(list(self.actor.parameters()) + list(self.critic.parameters()), lr=cfg.lr)

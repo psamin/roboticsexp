@@ -181,6 +181,8 @@ class EnvCfg:
     cam_view_back: float = 0.14                 # forward, -back toward the arm, z range above), drawn from the
     cam_view_z: tuple = (-0.05, 0.30)           # calibration while the true camera is moved by
     cam_view_jit: tuple = (0.02, 0.035)         # up to (m, rad) per episode (the mount moved ~2 cm / 2 deg in a day)
+    cam_height_gain: tuple = ()                 # (lo, hi): measured height above home scaled by a per-episode gain
+                                                # while the ball flies (real C920: ~0.79, radius reads small in flight)
     beside_feasible: bool = False               # beside starts: offset grows with task difficulty, dropped from high
                                                 # enough for the arm to get there (fall time vs pan reach)
     toss_curriculum: bool = False               # toss sideways speed and spin grow with task difficulty
@@ -324,6 +326,7 @@ class BounceEnv:
         self.cam_R = torch.eye(3, device=dev).expand(N, 3, 3).clone()
         self.view_R, self.view_t = torch.eye(3, device=dev).expand(N, 3, 3).clone(), z(N, 3)
         self.view_roi, self.view_on = z(N, 4), torch.zeros(N, dtype=torch.bool, device=dev)
+        self.h_gain = torch.ones(N, device=dev)
         self.blur, self.outlier_p_env, self.stamp_sd = z(N), z(N), z(N)
         self.rs_env = z(N)
         self.blade = torch.tensor([c.paddle.blade_a, c.paddle.blade_b, 2.2], device=dev).expand(N, 3).clone()
@@ -745,6 +748,8 @@ class BounceEnv:
             self.view_R[ids] = axis_angle(e[0], jr[:, 0]) @ axis_angle(e[1], jr[:, 1]) @ axis_angle(e[2], jr[:, 2]) @ R0
             self.view_t[ids] = t0 + c.cam_view_jit[0] * (2 * self._u(n, 3) - 1)
             self.view_on[ids] = self._u(n) < c.cam_view_p
+        if c.cam_height_gain:
+            self.h_gain[ids] = c.cam_height_gain[0] + (c.cam_height_gain[1] - c.cam_height_gain[0]) * self._u(n)
         self.outlier_p_env[ids] = LL(c.outlier_p, ds)
         self.stamp_sd[ids] = LL(c.stamp_noise, ds)
         self.age_bias_env[ids] = c.age_bias * ds * (2 * self._u(n) - 1)
@@ -1075,6 +1080,10 @@ class BounceEnv:
             err = err + torch.where(side, torch.zeros_like(extra), extra) * ray_o
         rel = (self.cam_R @ (p - self.home_env).unsqueeze(-1)).squeeze(-1)
         meas = self.home_env + rel + self.cam_bias + err + self.blur[:, None] * self.v_ball
+        if self.cfg.cam_height_gain:
+            flying = (p[:, 2] - B.RADIUS - self.o_prev[:, 2]) > 0.015
+            hz = self.home_env[:, 2] + self.h_gain * (meas[:, 2] - self.home_env[:, 2])
+            meas = torch.cat([meas[:, :2], torch.where(flying, hz, meas[:, 2])[:, None]], -1)
         p_out = self.outlier_p_env + self.cfg.hand_outlier_p * self.diff_g[:, 1] * (self.hand_t > 0).float()
         wild = self._u(n) < p_out
         dirn = self._n(n, 3)
