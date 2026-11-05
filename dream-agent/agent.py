@@ -43,34 +43,67 @@ tell. "Robot" at the start is just how the user gets your attention.
 Keep every say() under 20 words. Do not describe the image unless asked."""
 
 
-def make_tools(robot, speak):
+def make_tools(robot, emit):
+    """emit(event) is awaited for everything the user should see or hear (the terminal prints, the web page shows)."""
     @tool("look", "Photo of the table from the overhead camera.", {})
     async def look(args):
-        return {"content": [{"type": "image", "data": await asyncio.to_thread(robot.look), "mimeType": "image/jpeg"}]}
+        img = await asyncio.to_thread(robot.look)
+        await emit({"type": "image", "data": img})
+        return {"content": [{"type": "image", "data": img, "mimeType": "image/jpeg"}]}
 
     @tool("run_step", "Run one pick-and-place instruction on the arm with Dream-1. Blocks until it finishes.",
           {"step": str, "seconds": int})
     async def run_step(args):
         seconds = max(10, min(60, int(args.get("seconds") or 30)))
-        return {"content": [{"type": "text", "text": await asyncio.to_thread(robot.run_step, args["step"], seconds)}]}
+        await emit({"type": "step", "text": args["step"], "seconds": seconds})
+        out = await asyncio.to_thread(robot.run_step, args["step"], seconds)
+        await emit({"type": "step_result", "text": out, "calls_left": robot.budget.left})
+        return {"content": [{"type": "text", "text": out}]}
 
     @tool("say", "Say something short to the user.", {"text": str})
     async def say(args):
-        print(f"robot: {args['text']}")
-        await asyncio.to_thread(speak, args["text"])
+        await emit({"type": "say", "text": args["text"]})
         return {"content": [{"type": "text", "text": "said"}]}
 
     return [look, run_step, say]
 
 
-async def run(args, robot, speak, listen, answered=lambda: None):
-    names = ("look", "run_step", "say")
-    options = ClaudeAgentOptions(
-        system_prompt=system_prompt(args.handoff), model=args.model, cwd=str(HERE), max_turns=40,
-        mcp_servers={"robot": create_sdk_mcp_server("robot", tools=make_tools(robot, speak))},
-        tools=[], allowed_tools=[f"mcp__robot__{n}" for n in names],
+def options(robot, emit, handoff="the plate", model="sonnet"):
+    return ClaudeAgentOptions(
+        system_prompt=system_prompt(handoff), model=model, cwd=str(HERE), max_turns=40,
+        mcp_servers={"robot": create_sdk_mcp_server("robot", tools=make_tools(robot, emit))},
+        tools=[], allowed_tools=[f"mcp__robot__{n}" for n in ("look", "run_step", "say")],
         setting_sources=[])                        # nothing from CLAUDE.md or project settings
-    async with ClaudeSDKClient(options=options) as client:
+
+
+async def turn(client, text, emit):
+    """One request: the planner's text, tool calls and cost go to emit."""
+    await client.query(text)
+    async for msg in client.receive_response():
+        if isinstance(msg, AssistantMessage):
+            for block in msg.content:
+                if isinstance(block, ToolUseBlock):
+                    await emit({"type": "tool", "name": block.name.split("__")[-1], "input": block.input})
+                elif isinstance(block, TextBlock) and block.text.strip():
+                    await emit({"type": "assistant", "text": block.text.strip()})
+        elif isinstance(msg, ResultMessage):
+            await emit({"type": "done", "turns": msg.num_turns, "cost": msg.total_cost_usd or 0.0})
+
+
+async def run(args, robot, speak, listen, answered=lambda: None):
+    async def emit(ev):
+        t = ev["type"]
+        if t == "say":
+            print(f"robot: {ev['text']}")
+            await asyncio.to_thread(speak, ev["text"])
+        elif t == "tool":
+            print(f"  -> {ev['name']} {ev['input'] or ''}")
+        elif t == "assistant":
+            print(f"  (claude) {ev['text']}")
+        elif t == "done" and ev["cost"]:
+            print(f"  [{ev['turns']} turns, ${ev['cost']:.3f} of Claude usage]")
+
+    async with ClaudeSDKClient(options=options(robot, emit, args.handoff, args.model)) as client:
         while True:
             text = args.once or await asyncio.to_thread(listen)
             if not text:
@@ -78,16 +111,7 @@ async def run(args, robot, speak, listen, answered=lambda: None):
             print(f"you: {text}")
             if text.lower().strip(" .!") in ("quit", "exit", "goodbye"):
                 break
-            await client.query(text)
-            async for msg in client.receive_response():
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, ToolUseBlock):
-                            print(f"  -> {block.name.split('__')[-1]} {block.input or ''}")
-                        elif isinstance(block, TextBlock) and block.text.strip():
-                            print(f"  (claude) {block.text.strip()}")
-                elif isinstance(msg, ResultMessage) and msg.total_cost_usd:
-                    print(f"  [{msg.num_turns} turns, ${msg.total_cost_usd:.3f} of Claude usage]")
+            await turn(client, text, emit)
             answered()
             if args.once:
                 break

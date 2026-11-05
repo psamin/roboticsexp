@@ -42,8 +42,8 @@ def rms(x):
     return float(np.sqrt(np.mean(x.astype(np.float64) ** 2))) if len(x) else 0.0
 
 
-def worth_sending(audio):
-    return len(audio) >= MIN_S * RATE and rms(audio) >= MIN_RMS
+def worth_sending(audio, rate=RATE):
+    return len(audio) >= MIN_S * rate and rms(audio) >= MIN_RMS
 
 
 def to_wav(audio):
@@ -55,8 +55,12 @@ def to_wav(audio):
 
 def transcribe(audio, key=None):
     """One Deepgram request for one clip. Returns the transcript ('' if nobody spoke)."""
-    req = urllib.request.Request(DEEPGRAM, to_wav(audio), {"Authorization": f"Token {key or deepgram_key()}",
-                                                          "Content-Type": "audio/wav"})
+    return transcribe_wav(to_wav(audio), key)
+
+
+def transcribe_wav(wav_bytes, key=None):
+    req = urllib.request.Request(DEEPGRAM, wav_bytes, {"Authorization": f"Token {key or deepgram_key()}",
+                                                      "Content-Type": "audio/wav"})
     with urllib.request.urlopen(req, timeout=30) as r:
         res = json.load(r)
     return res["results"]["channels"][0]["alternatives"][0]["transcript"].strip()

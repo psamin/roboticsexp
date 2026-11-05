@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --ink: #1c1c1a; --muted: #6b6b66; --line: #e3e2de;
+    --accent: #2f6fe4; --accent-ink: #ffffff; --you: #e8effd; --robot: #f0efec;
+    --ok: #1f8a4c; --warn: #b35c00; --live: #c4351b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413; --panel: #1d1d1b; --ink: #ecebe7; --muted: #9a9993; --line: #2f2e2b;
+      --accent: #5b8ff0; --accent-ink: #0d0d0c; --you: #22314f; --robot: #262523;
+      --ok: #4cc27f; --warn: #e39a4a; --live: #ef6a4f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .app { max-width: 760px; margin: 0 auto; padding: 16px; min-height: 100vh; display: flex; flex-direction: column; gap: 14px; }
+  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0 6px 0 0; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+  .badge.live { color: var(--live); border-color: var(--live); }
+  .stat { font-size: 13px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.on { background: var(--ok); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .mic { display: flex; align-items: center; gap: 16px; }
+  #micBtn { width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer; flex: none;
+            background: var(--robot); color: var(--ink); font-size: 30px; transition: transform .1s; }
+  #micBtn.on { background: var(--accent); color: var(--accent-ink); }
+  #micBtn:active { transform: scale(.96); }
+  .mic-text { flex: 1; min-width: 0; }
+  #state { font-weight: 600; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .meter { height: 6px; border-radius: 3px; background: var(--line); margin-top: 8px; overflow: hidden; }
+  #level { height: 100%; width: 0; background: var(--accent); transition: width .05s; }
+  .wake { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .wake input { width: 90px; }
+  input[type=text] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+                     border-radius: 8px; padding: 6px 10px; }
+  #confirm { display: none; border-color: var(--live); }
+  #confirm.show { display: block; }
+  #confirm .q { white-space: pre-wrap; margin: 6px 0 12px; }
+  .btn { font: inherit; font-weight: 600; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+  .btn.primary { background: var(--live); color: #fff; }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn.send { background: var(--accent); color: var(--accent-ink); }
+  #feed { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 200px; }
+  .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; overflow-wrap: anywhere; }
+  .msg.you { align-self: flex-end; background: var(--you); }
+  .msg.robot { align-self: flex-start; background: var(--robot); }
+  .meta { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .meta.warn { color: var(--warn); }
+  .step { align-self: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--panel); max-width: 85%; }
+  .step b { font-weight: 600; }
+  .step .res { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .shot { align-self: flex-start; width: 240px; max-width: 70%; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; }
+  .shot.big { width: 100%; max-width: 100%; cursor: zoom-out; }
+  form { display: flex; gap: 8px; }
+  form input { flex: 1; min-width: 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Robot</h1>
+    <span id="mode" class="badge">mock</span>
+    <span class="stat"><span id="conn" class="dot"></span></span>
+    <span class="spacer"></span>
+    <span class="stat">Dream calls left <b id="calls">–</b></span>
+    <span class="stat">Claude <b id="cost">$0.00</b></span>
+  </header>
+
+  <div class="panel mic">
+    <button id="micBtn" title="Start or stop listening" aria-label="Microphone">🎙</button>
+    <div class="mic-text">
+      <div id="state">Microphone off</div>
+      <div class="hint" id="hint">Click the mic and allow it. Then just talk: “robot, hand me the medicine bottle”.</div>
+      <div class="meter"><div id="level"></div></div>
+      <div class="wake">Start requests with <input id="wake" type="text" value="robot" spellcheck="false"> (empty: every sentence)</div>
+    </div>
+  </div>
+
+  <div id="confirm" class="panel">
+    <b>Run this on the arm?</b>
+    <div class="q" id="confirmText"></div>
+    <button class="btn primary" id="runBtn">Run</button>
+    <button class="btn ghost" id="skipBtn">Skip</button>
+    <span class="hint">&nbsp; or say “yes” / “no”</span>
+  </div>
+
+  <div id="feed"></div>
+
+  <form id="typeForm">
+    <input id="typeBox" type="text" placeholder="Or type a request" autocomplete="off">
+    <button class="btn send" type="submit">Send</button>
+  </form>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const feed = $("feed");
+let ws, busy = false, pendingId = null, speaking = false, listening = false;
+
+// ---------- server connection ----------
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => $("conn").classList.add("on");
+  ws.onclose = () => { $("conn").classList.remove("on"); setTimeout(connect, 1000); };
+  ws.onmessage = e => handle(JSON.parse(e.data));
+}
+connect();
+const send = obj => ws && ws.readyState === 1 && ws.send(JSON.stringify(obj));
+
+function add(cls, text, tag = "div") {
+  const el = document.createElement(tag);
+  el.className = cls;
+  if (text !== undefined) el.textContent = text;
+  feed.appendChild(el);
+  el.scrollIntoView({ block: "end", behavior: "smooth" });
+  return el;
+}
+
+let lastStep = null;
+function handle(ev) {
+  switch (ev.type) {
+    case "status":
+      busy = ev.busy;
+      $("mode").textContent = ev.robot;
+      $("mode").classList.toggle("live", ev.robot === "live");
+      $("calls").textContent = ev.calls_left;
+      $("cost").textContent = "$" + ev.total_cost.toFixed(2);
+      if (document.activeElement !== $("wake")) $("wake").value = ev.wake;
+      showState();
+      break;
+    case "user": add("msg you", ev.text); break;
+    case "say": add("msg robot", ev.text); speak(ev.text); break;
+    case "assistant": add("meta", ev.text); break;
+    case "tool":
+      if (ev.name === "look") add("meta", "looking at the table…");
+      break;
+    case "image": {
+      const img = add("shot", undefined, "img");
+      img.src = "data:image/jpeg;base64," + ev.data;
+      img.onclick = () => img.classList.toggle("big");
+      break;
+    }
+    case "step": {
+      lastStep = add("step");
+      lastStep.innerHTML = "<b>Step</b> · <span></span> <span class='hint'></span><div class='res'>running…</div>";
+      lastStep.children[1].textContent = ev.text;
+      lastStep.children[2].textContent = `(${ev.seconds} s)`;
+      break;
+    }
+    case "step_result":
+      if (lastStep) lastStep.querySelector(".res").textContent = ev.text;
+      $("calls").textContent = ev.calls_left;
+      break;
+    case "done": add("meta", `${ev.turns} turns · $${ev.cost.toFixed(3)}`); $("cost").textContent = "$" + ev.total_cost.toFixed(2); break;
+    case "ignored": add("meta", `heard “${ev.text}”, no “${ev.wake}” at the start, so ignored`); break;
+    case "note": add("meta warn", ev.text); break;
+    case "confirm":
+      pendingId = ev.id;
+      $("confirmText").textContent = ev.text.trim();
+      $("confirm").classList.add("show");
+      speak("Should I run this step on the arm?");
+      showState();
+      break;
+    case "confirmed":
+      if (pendingId === ev.id) { pendingId = null; $("confirm").classList.remove("show"); }
+      showState();
+      break;
+  }
+}
+$("runBtn").onclick = () => send({ type: "confirm", id: pendingId, ok: true });
+$("skipBtn").onclick = () => send({ type: "confirm", id: pendingId, ok: false });
+$("typeForm").onsubmit = e => {
+  e.preventDefault();
+  const t = $("typeBox").value.trim();
+  if (t) send({ type: "text", text: t });
+  $("typeBox").value = "";
+};
+$("wake").onchange = () => send({ type: "wake", word: $("wake").value.trim() });
+
+// ---------- speech out (the browser's own voice, free) ----------
+function speak(text) {
+  if (!("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.onstart = () => { speaking = true; showState(); };
+  u.onend = u.onerror = () => setTimeout(() => { speaking = false; showState(); }, 400);
+  speechSynthesis.speak(u);
+}
+
+// ---------- speech in: detect speech here, send only finished utterances ----------
+const FRAME_S = 0.03, MIN_RMS = 150 / 32768, START_S = 0.15, END_S = 0.8, MAX_S = 15, PRE_S = 0.4;
+let ctx, rate, frameLen, buf = new Float32Array(0), floor = null, pre = [], seg = null, voiced = 0, quiet = 0, hearing = false;
+
+function showState() {
+  let s, h;
+  if (!listening) { s = "Microphone off"; h = "Click the mic and allow it. Then just talk."; }
+  else if (pendingId !== null) { s = "Waiting for you: Run or Skip"; h = "Say “yes” or “no”, or use the buttons."; }
+  else if (speaking) { s = "Speaking…"; h = "Not listening while it talks."; }
+  else if (busy) { s = "Working…"; h = "Planning or running a step."; }
+  else if (hearing) { s = "Hearing you…"; h = ""; }
+  else {
+    const w = $("wake").value.trim();
+    s = "Listening"; h = w ? `Say “${w}, …” followed by what you want.` : "Say what you want.";
+  }
+  $("state").textContent = s;
+  $("hint").textContent = h;
+}
+
+function rms(a) { let s = 0; for (const x of a) s += x * x; return Math.sqrt(s / a.length); }
+
+function frame(f) {
+  const level = rms(f);
+  $("level").style.width = Math.min(100, level * 800) + "%";
+  const deaf = speaking || (busy && pendingId === null);      // don't hear its own voice; nothing to say while busy
+  if (seg === null) {
+    floor = floor === null ? level : 0.98 * floor + 0.02 * level;
+    pre.push(f); if (pre.length > PRE_S / FRAME_S) pre.shift();
+    voiced = (!deaf && level > Math.max(MIN_RMS, 3 * floor)) ? voiced + 1 : 0;
+    if (voiced * FRAME_S >= START_S) { seg = pre.slice(); quiet = 0; hearing = true; showState(); }
+    return;
+  }
+  seg.push(f);
+  quiet = level < Math.max(MIN_RMS, 3 * floor) ? quiet + 1 : 0;
+  if (quiet * FRAME_S < END_S && seg.length * FRAME_S < MAX_S && !speaking) return;
+  const out = seg; seg = null; voiced = 0; pre = []; hearing = false; showState();
+  if (!speaking && ws && ws.readyState === 1) ws.send(wav(out));
+}
+
+function wav(frames) {
+  const n = frames.reduce((a, f) => a + f.length, 0);
+  const view = new DataView(new ArrayBuffer(44 + 2 * n));
+  const str = (o, s) => [...s].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); view.setUint32(4, 36 + 2 * n, true); str(8, "WAVE"); str(12, "fmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true); str(36, "data"); view.setUint32(40, 2 * n, true);
+  let o = 44;
+  for (const f of frames) for (const x of f) { view.setInt16(o, Math.max(-1, Math.min(1, x)) * 32767, true); o += 2; }
+  return view.buffer;
+}
+
+async function startMic() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  ctx = new AudioContext();
+  rate = ctx.sampleRate; frameLen = Math.round(rate * FRAME_S);
+  const code = `class Tap extends AudioWorkletProcessor {
+    process(inputs) { const c = inputs[0][0]; if (c) this.port.postMessage(c.slice(0)); return true; } }
+    registerProcessor("tap", Tap);`;
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: "application/javascript" })));
+  const tap = new AudioWorkletNode(ctx, "tap");
+  ctx.createMediaStreamSource(stream).connect(tap);
+  tap.port.onmessage = e => {
+    if (!listening) return;
+    const merged = new Float32Array(buf.length + e.data.length);
+    merged.set(buf); merged.set(e.data, buf.length); buf = merged;
+    while (buf.length >= frameLen) { frame(buf.slice(0, frameLen)); buf = buf.slice(frameLen); }
+  };
+}
+
+$("micBtn").onclick = async () => {
+  try {
+    if (!ctx) await startMic();
+    listening = !listening;
+    if (listening) await ctx.resume(); else { seg = null; hearing = false; $("level").style.width = "0"; }
+    $("micBtn").classList.toggle("on", listening);
+    showState();
+  } catch (e) {
+    $("state").textContent = "No microphone";
+    $("hint").textContent = "The browser was not allowed to use it: click the icon left of the address bar and allow the microphone.";
+  }
+};
+showState();
+</script>
+</body>
+</html>
