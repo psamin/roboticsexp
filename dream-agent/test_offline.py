@@ -60,3 +60,16 @@ def test_live_robot_needs_a_typed_y(monkeypatch):
     assert not ran
     out = robot.LiveRobot(confirm=lambda _: "y").run_step("Pick up the box", 30)
     assert out.startswith("finished") and ran and "--live" in ran[0][0]
+    assert "Pick up the box with the left arm" in ran[0][0]                     # docs: name the arm Dream drives
+
+
+def test_call_budget_stops_steps_before_asking(monkeypatch):
+    asked = []
+    monkeypatch.setattr(robot.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    r = robot.LiveRobot("--side right", confirm=lambda q: asked.append(q) or "y", max_calls=40)
+    assert r.run_step("Put the box on the plate", 30).startswith("finished") and r.budget.left == 9
+    assert r.steps == ["Put the box on the plate with the right arm"]
+    assert r.run_step("Put the cup on the plate", 30).startswith("not run") and len(asked) == 1
+    m = robot.MockRobot(max_calls=31)
+    if robot.MOCK_SCENE.exists():
+        assert "done" in m.run_step("a", 30) and m.run_step("b", 30).startswith("not run")

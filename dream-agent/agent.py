@@ -19,21 +19,24 @@ import voice
 from robot import MOCK_SCENE, LiveRobot, MockRobot
 
 HERE = Path(__file__).resolve().parent
-HANDOFF = "the front edge of the table"          # where "give it to me" puts things (nearest the user)
 
-SYSTEM = f"""You are the planner for a single SO-101 robot arm on a table, talking with its owner.
+
+def system_prompt(handoff):
+    return f"""You are the planner for a single SO-101 robot arm on a table, talking with its owner.
 Each step you run is carried out by Dream-1, a vision-language-action model that does ONE short pick-and-place
-instruction at a time and does not plan. Your job:
+instruction at a time, from the cameras and the words alone. It does not plan, cannot tell when it is done, and
+each step costs money, so use as few steps as possible. Your job:
 1. Call look() to see the table from the overhead camera before planning, and again after each step to check it.
-2. Break the request into the fewest simple steps. Write each step as one imperative sentence naming one visible
-   object and one target, e.g. "Pick up the medicine bottle and place it on the plate". No pronouns, no
-   multi-part steps, no reasoning in the step text.
-3. "Give it to me", "bring me", "hand me" mean: place the object at {HANDOFF}.
+2. Break the request into the fewest simple steps. Write each step as one short imperative sentence with one
+   visible object and one visible target, in the style "Put the medicine bottle on the plate" or "Put the apple
+   into the bowl". Use the plainest everyday names for things. No pronouns, no multi-part steps, no reasoning.
+3. "Give it to me", "bring me", "hand me" mean: put the object on {handoff} (the user's hand-off spot).
 4. Before the first step, say() the plan in one short sentence. Then run_step() each step in order.
 5. If look() shows a step did not work, retry it once with the same wording; if it fails again, stop and say() so.
 6. If an object you need is not visible or the request is unsafe or impossible for one small arm (heavy, liquids
    that could spill, knives, hot things, out of reach), do not move: say() why and ask what to do.
 7. If a step is skipped by the user, do not repeat it; ask what they want instead.
+8. If run_step reports the session's call budget is used up, stop and say so.
 Keep every say() under 20 words. Do not describe the image unless asked."""
 
 
@@ -60,7 +63,7 @@ def make_tools(robot, speak):
 async def run(args, robot, speak, listen):
     names = ("look", "run_step", "say")
     options = ClaudeAgentOptions(
-        system_prompt=SYSTEM, model=args.model, cwd=str(HERE), max_turns=40,
+        system_prompt=system_prompt(args.handoff), model=args.model, cwd=str(HERE), max_turns=40,
         mcp_servers={"robot": create_sdk_mcp_server("robot", tools=make_tools(robot, speak))},
         tools=[], allowed_tools=[f"mcp__robot__{n}" for n in names],
         setting_sources=[])                        # nothing from CLAUDE.md or project settings
@@ -93,10 +96,13 @@ def main():
     ap.add_argument("--once", help="run one request and exit")
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
     ap.add_argument("--dream-args", default="", help="live: extra so101/dream_run.py flags, e.g. '--checkpoint ...'")
+    ap.add_argument("--handoff", default="the plate", help="where 'give it to me' puts things: a visible object near you")
+    ap.add_argument("--max-calls", type=int, default=100, help="cap on estimated billed Dream calls this session")
     ap.add_argument("--model", default="sonnet")
     ap.add_argument("--quiet", action="store_true", help="print answers instead of speaking them")
     args = ap.parse_args()
-    robot = MockRobot(args.scene) if args.robot == "mock" else LiveRobot(args.dream_args)
+    robot = (MockRobot(args.scene, max_calls=args.max_calls) if args.robot == "mock"
+             else LiveRobot(args.dream_args, max_calls=args.max_calls))
     speak = (lambda t: None) if args.quiet or not args.voice else voice.say
     listen = voice.listen if args.voice else (lambda: input("you: "))
     asyncio.run(run(args, robot, speak, listen))
