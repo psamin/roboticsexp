@@ -1,0 +1,19 @@
+[project]
+name = "dream-agent"
+version = "0.1.0"
+description = "Voice-driven fetch agent: Claude plans, Dream-1 moves the SO-101"
+requires-python = "==3.12.*"
+dependencies = [
+    "claude-agent-sdk",
+    "numpy",
+    "opencv-python",
+    "sounddevice",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
