@@ -105,7 +105,12 @@ def main():
              else LiveRobot(args.dream_args, max_calls=args.max_calls))
     speak = (lambda t: None) if args.quiet or not args.voice else voice.say
     listen = voice.listen if args.voice else (lambda: input("you: "))
-    asyncio.run(run(args, robot, speak, listen))
+    print(f"dream-agent: {args.robot} robot, {'push-to-talk (Enter, speak, Enter)' if args.voice else 'type a request'};"
+          " say or type 'quit' to stop, Ctrl-C any time")
+    try:
+        asyncio.run(run(args, robot, speak, listen))
+    except (KeyboardInterrupt, EOFError):
+        print("\nstopped")
     if robot.steps:
         print("steps run:", *robot.steps, sep="\n  ")
 
