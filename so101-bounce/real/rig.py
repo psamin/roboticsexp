@@ -324,11 +324,12 @@ class CameraModel:
         x, y, z = self.R.T @ (np.asarray(p_base, float) - self.t)
         return self.K[0, 0] * x / z + self.K[0, 2], self.K[1, 1] * y / z + self.K[1, 2]
 
-    def paddle_roi(self, home, half=0.14, z=(-0.05, 0.30), size=(640, 480)):
-        """Pixel box around the paddle's bounce volume (home +-half m sideways, z above it), so the finder cannot lock
-        onto white parts of the arm or the room."""
+    def paddle_roi(self, home, half=0.14, z=(-0.05, 0.30), size=(640, 480), back=None):
+        """Pixel box around the paddle's bounce volume (home +-half m sideways and forward, -back toward the arm, z
+        above it), so the finder cannot lock onto white parts of the arm or the room. The sim's cam_view uses the same."""
+        back = half if back is None else back
         pts = [self.project(np.asarray(home, float) + np.array([dx, dy, dz]))
-               for dx in (-half, half) for dy in (-half, half) for dz in z]
+               for dx in (-back, half) for dy in (-half, half) for dz in z]
         u, v = np.array(pts).T
         return (max(0, int(u.min())), max(0, int(v.min())), min(size[0], int(u.max()) + 1), min(size[1], int(v.max()) + 1))
 
