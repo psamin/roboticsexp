@@ -249,6 +249,7 @@ def main():
         else:
             state, rounds, ignore, t_retrim = "armed", 0, None, None
         period = 1.0 / hz
+        safe_goal, n_guard = None, 0                             # workspace guard: last goal inside cfg.paddle_box
         t_active = t_next = time.perf_counter()
         last_frame = -1
         hot_n = 0
@@ -348,7 +349,9 @@ def main():
                     if not recent or out_n >= 2 or static:
                         why = ("no detection" if not recent else "ball off the paddle" if out_n >= 2 else
                                "detection has not moved for 1.5 s: not a ball? ignoring that spot")
-                        print(f"ball lost after {now - t_active:.1f} s ({why}): back to holding; put the ball back on")
+                        print(f"ball lost after {now - t_active:.1f} s ({why}): back to holding; put the ball back on"
+                              + (f" (paddle goal held at the trained box {n_guard} times)" if n_guard else ""))
+                        safe_goal, n_guard = None, 0
                         if static:
                             ignore = span[-1] - home.numpy()               # relative to the paddle, like `rel`
                         state, t_lost, goal_lost = "returning", now, np.array(goal, float)
@@ -371,6 +374,12 @@ def main():
                     trim[3:5] = np.clip(trim[3:5] + np.linalg.solve(J, -0.5 * drift * 0.1), -0.052, 0.052)
                     ro.q_ref = torch.tensor(q_ref + trim, dtype=torch.float32)[None]
                 goal = np.clip(q_ref + trim + scale * act, lower, upper)
+                po = kin.forward(torch.tensor(goal, dtype=torch.float32)[None])["paddle_o"][0].numpy() - home.numpy()
+                if (np.abs(po[:2]) > cfg.paddle_box[0]).any() or abs(po[2]) > cfg.paddle_box[1]:
+                    goal = safe_goal if safe_goal is not None else q_ref + trim   # outside the box the sim trained in
+                    n_guard += 1
+                else:
+                    safe_goal = goal
                 b.sync_write("Goal_Position", sim_to_deg(goal))
                 ro.acted(act)
             elif state == "returning":                              # ramp back to the hold command (0.4 s)
