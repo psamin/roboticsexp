@@ -7,7 +7,8 @@ robot base frame; the ball's apparent size gives the scale for depth from radius
 
 Start with the arm folded at rest. The arm glides to the hold pose and waits; stick the ball at the paddle centre
 (a small loop of tape: a free ball rolls off at 1 deg of tilt within a second), take your hand away, press Enter. Each move is slow (2 s) and keeps the paddle level so the ball stays put; if it rolls
-off, press Ctrl-C (the arm glides back and turns off). Writes real/camera_calib.json.
+off, press Ctrl-C (the arm glides back and turns off). Writes real/camera_calib.json and real/camera_ref.png (a frame
+the runner compares its view with, to catch a moved camera).
 """
 import json
 import re
@@ -20,7 +21,7 @@ import torch
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 import arm as A                                                    # noqa: E402
-from rig import BALL_RADIUS, CAMERA_CALIB, CONFIG, BallFinder, Camera, camera_index, lock_camera, default_K, deg_to_sim, sim_to_deg  # noqa
+from rig import BALL_RADIUS, CAMERA_CALIB, CAMERA_REF, CONFIG, BallFinder, Camera, calib_inputs, camera_index, lock_camera, default_K, deg_to_sim, shift_paddle, sim_to_deg  # noqa
 from bounce.robot import ArmKinematics, build_model                # noqa: E402
 
 OFFSETS = [(0, 0, 0), (0.25, 0, 0), (-0.25, 0, 0), (0, 0.15, 0.25), (0, -0.15, -0.25), (0, 0.15, -0.1), (0, -0.15, 0.1),
@@ -48,7 +49,7 @@ def level(kin, q, iters=10):
 
 def main():
     hold = json.loads(A.HOLD.read_text())
-    kin = ArmKinematics(build_model(), 1)
+    kin = shift_paddle(ArmKinematics(build_model(), 1))         # the ball sits at the real blade centre, as in the runner
     cam_cfg = CONFIG["cameras"]["overhead"]
     cam = Camera(camera_index(cam_cfg), cam_cfg["width"], cam_cfg["height"], cam_cfg["fps"], latency_s=0.0)   # raw read times
     lock_camera(cam, cam_cfg)
@@ -57,6 +58,7 @@ def main():
     rest = A.hold_here(b)
     obj, img, rad = [], [], []
     sway_fk, sway_det = [], []
+    ref_frame = None
     try:
         A.glide(b, hold, 3.0)
         input("Tape the ball to the centre of the paddle (small loop of tape under it), take your hand away, press Enter...")
@@ -99,6 +101,7 @@ def main():
             obj.append(p)
             img.append([u, v])
             rad.append(r)
+            ref_frame = cam.get()[0].copy()                     # hands away, camera where it is calibrated
             print(f"pose {k + 1}/{len(OFFSETS)}: ball at {np.round(p, 3)} m -> pixel ({u:.1f}, {v:.1f}), radius {r:.1f} px")
         if len(obj) >= 6:                                         # camera latency: sway the paddle, match timing later
             A.glide(b, hold, 2.0)
@@ -146,11 +149,12 @@ def main():
         print(f"camera latency {1000 * lat[0]:.0f} ms (fit {lat[1]:.1f} px) -> real/config.yaml")
     else:
         print("camera latency not measured (too few detections while swaying, or no clear minimum); keeping the config value")
-    out["joint_map_offset_deg"] = [float(v) for v in __import__("rig")._jmap()[1]]   # paddle geometry it was fitted with
+    out.update(calib_inputs())                                  # paddle geometry it was fitted with
     CAMERA_CALIB.write_text(json.dumps({**out, **obs}, indent=1))
+    cv2.imwrite(str(CAMERA_REF), ref_frame)
     print(f"camera at {np.round(out['camera_position_m'], 3)} m (base frame); reprojection {out['reprojection_px']:.2f} px; "
           f"depth from ball size: rms error {out['depth_err_cm_rms']:.1f} cm; focal {out['K'][0][0]:.0f} px; "
-          f"radius scale {out['radius_scale']:.2f} -> {CAMERA_CALIB}")
+          f"radius scale {out['radius_scale']:.2f} -> {CAMERA_CALIB}, {CAMERA_REF.name}")
 
 
 def latency(out, fk, det):

@@ -31,8 +31,9 @@ HERE = Path(__file__).parent
 HOLD = HERE / "hold_pose.json"
 LEROBOT_DEFAULTS = {"P_Coefficient": 16, "D_Coefficient": 32, "Acceleration": 254}
 # What the bouncing policy is trained for: Acceleration 0 (no ramp; 254 may cap the paddle at ~39 rad/s^2, too slow
-# to launch the ball). The runner writes these and reads them back before any motion.
-BOUNCE_REGISTERS = {"Acceleration": 0}
+# to launch the ball), and LeRobot's D 32 (speed_test.py sweeps D, and RAM keeps a changed value until power-off).
+# The runner writes these and reads them back before any motion.
+BOUNCE_REGISTERS = {"Acceleration": 0, "D_Coefficient": 32}
 
 
 def port_free():

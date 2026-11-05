@@ -13,7 +13,7 @@ cameras:
   wrist: {name: "USB HD Camera", index: 1, width: 480, height: 640, fps: 30, rotation: 90}
   side: null          # the planned 120 fps side camera (Arducam OV9281): set {index: N, ...} once it is connected
 # Cameras are found by name (the index is only a fallback off macOS); the scripts stop if one is missing.
-camera_latency_s: 0.048     # measured by calibrate_camera.py (frame read time minus capture)
+camera_latency_s: 0.062     # measured by calibrate_camera.py (frame read time minus capture)
 # Real blade centre from the model's, cm: along the handle (+ toward the tip) and sideways (+ left at the hold pose).
 # Measure with real/camera_check.py and the ball set at the blade's centre.
 paddle_offset_cm: [0.0, 0.0]

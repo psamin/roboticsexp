@@ -1,11 +1,14 @@
 """Check the overhead camera without the arm: draw where the camera calibration expects the paddle at the hold pose
-(through the joint map) on a frame, and report the ball if one is in view.
+(through the joint map) on a frame, report the ball if one is in view, and how far the view has shifted from
+real/camera_ref.png (the frame saved with the calibration; if the camera moved, recalibrate).
 
   uv run python real/camera_check.py                      # live camera, same settings as bounce_run.py
   uv run python real/camera_check.py --video real/logs/run-<time>.mp4 [--frame 30]
+  uv run python real/camera_check.py [--video ...] --set-reference   # adopt this frame as real/camera_ref.png
 
-Writes real/logs/camera-check-<time>.png. If the outline is off the blade, the camera or the paddle moved, or the
-joint map changed: rerun real/calibrate_camera.py.
+Writes real/logs/camera-check-<time>.png. If the outline is off the blade (with the arm at the hold pose), the camera
+or the paddle moved, or the joint map changed: rerun real/calibrate_camera.py. Adopt a reference only from a frame
+taken since the last calibration, with the camera untouched.
 """
 import argparse
 import json
@@ -45,6 +48,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--video")
     ap.add_argument("--frame", type=int, default=30)
+    ap.add_argument("--set-reference", action="store_true",
+                    help="save this frame as real/camera_ref.png (only if the camera has not moved since calibration)")
     a = ap.parse_args()
     cc = rig.CONFIG["cameras"]["overhead"]
     if a.video:
@@ -55,6 +60,13 @@ def main():
             raise SystemExit(f"could not read frame {a.frame} of {a.video}")
     else:
         frame = grab(cc)
+    if a.set_reference:
+        cv2.imwrite(str(rig.CAMERA_REF), frame)
+        print(f"reference frame -> {rig.CAMERA_REF}")
+    ok, view = rig.camera_view_check([frame])
+    print(view)
+    if ok is False:
+        cv2.putText(frame, view.split(":")[0], (8, 470), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
     hold = json.loads((HERE / "hold_pose.json").read_text())
     q = torch.tensor(rig.deg_to_sim(hold), dtype=torch.float32)[None]
     cfg = EnvCfg()

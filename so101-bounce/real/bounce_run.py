@@ -4,6 +4,8 @@
   uv run python real/bounce_run.py --checkpoint policies/best.pt                  # the real ball (overhead camera)
 
 Before the first real-ball run: `real/sysid.py set-hold` (hold pose) and `real/calibrate_camera.py` (camera pose).
+Camera mode refuses to start if the overhead camera's view has moved from real/camera_ref.png (saved with the camera
+calibration) by more than a few pixels; --camera-moved-ok overrides.
 
 What happens:
  1. Start with the arm folded at rest. It writes the servo settings the policy was trained with (P gain, and
@@ -11,7 +13,8 @@ What happens:
  2. It glides to the hold pose and trims the command until the measured joints sit at the hold pose (sag
     correction, like the simulator's hold command), so the paddle is level.
  3. Press Enter to arm. Camera mode: put, drop or bounce the ball onto the paddle; the policy starts as soon as two
-    camera frames see it over the paddle, and after a drop it glides back to holding and waits for the next ball. Virtual mode: a simulated ball starts resting on the paddle.
+    camera frames see it over the paddle, and after a drop it glides back to holding, trims the sag again, and waits
+    for the next ball. Virtual mode: a simulated ball starts resting on the paddle.
  4. The policy runs at its training rate until the ball is lost, --seconds pass, or you press Ctrl-C.
  5. The arm glides back to the hold pose; press Enter (ball removed) and it folds back to rest and turns off.
 Every tick is logged to real/logs/run-<time>.npz (joints, goals, actions, detections, timing).
@@ -28,7 +31,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import arm as A                                                    # noqa: E402
-from rig import BALL_RADIUS, CAMERA_CALIB as rig_calib, CONFIG, BallFinder, Camera, CameraModel, camera_index, lock_camera, _jmap as rig_jmap, deg_to_sim, shift_paddle, sim_to_deg   # noqa: E402
+from rig import BALL_RADIUS, CAMERA_CALIB as rig_calib, CONFIG, BallFinder, Camera, CameraModel, calib_inputs, camera_index, camera_view_check, fresh_frames, lock_camera, deg_to_sim, shift_paddle, sim_to_deg   # noqa: E402
 from bounce import ball as B                                       # noqa: E402
 from bounce.env import EnvCfg                                      # noqa: E402
 from bounce import launch as LAUNCH                                # noqa: E402
@@ -41,6 +44,13 @@ START_GAP_S = 0.15        # policy on at 2 detections this recent over the paddl
 LOST_S = 1.0              # no detection this long: back to holding
 START_LATERAL = 0.16      # m from the paddle centre: drops beside the paddle start the policy too
 STATIC_S = 1.5            # a "ball" that has not moved this long while active is a static orange blob
+SAG_TRIM_S = 3.0          # hold trim length, at startup and after every try
+
+
+def sag_trim_step(cmd, target, pos, dt):
+    """One step of the hold trim: move the goal so the measured joints settle at target (gravity sag, deadband).
+    Slow integral (3/s): the servos lag ~0.1 s."""
+    return {n: float(np.clip(cmd[n] + 3.0 * dt * (target[n] - pos[n]), target[n] - 12, target[n] + 12)) for n in A.ARM}
 
 
 class VirtualBall:
@@ -135,6 +145,9 @@ def main():
     ap.add_argument("--vb-hz", type=float, default=200.0,
                     help="with --virtual-ball: how often the simulated ball samples the paddle (extra joint reads "
                          "between control steps; 50 = once per step). Fast strokes need more than 50.")
+    ap.add_argument("--camera-moved-ok", action="store_true",
+                    help="run even if the overhead camera's view no longer matches real/camera_ref.png (moved since "
+                         "calibrate_camera.py)")
     a = ap.parse_args()
     limit = a.seconds or (20.0 if a.virtual_ball else float("inf"))
     agent, extra = PPO.load(a.checkpoint, "cpu", load_optimizer=False)
@@ -163,6 +176,12 @@ def main():
         cc = CONFIG["cameras"]["overhead"]
         cam = Camera(camera_index(cc), cc["width"], cc["height"], cc["fps"], CONFIG.get("camera_latency_s", 0.035))
         lock_camera(cam, cc)
+        ok, msg = camera_view_check(fresh_frames(cam))
+        print(msg)
+        if ok is False and not a.camera_moved_ok:
+            cam.close()
+            raise SystemExit("not running on a camera calibration that no longer fits the view (--camera-moved-ok "
+                             "to run anyway)")
         if a.record:
             import cv2
             video = A.HERE / "logs" / f"run-{time.strftime('%Y%m%d-%H%M%S')}.mp4"
@@ -170,10 +189,12 @@ def main():
             writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"), cc["fps"], (cc["width"], cc["height"]))
             print(f"recording to {video}")
         model = CameraModel()
-        made_with = json.loads(rig_calib.read_text()).get("joint_map_offset_deg")
-        if made_with is None or np.abs(np.array(made_with) - rig_jmap()[1]).max() > 0.05:
-            print("WARNING: the camera calibration predates the current wrist offsets (re-levelled since?): ball positions "
-                  "may be off by a few cm. Rerun `uv run python real/calibrate_camera.py` with the ball taped on.")
+        made = json.loads(rig_calib.read_text())
+        changed = [k for k, v in calib_inputs().items() if made.get(k, v) != v]
+        if "joint_map_offset_deg" not in made or changed:
+            print(f"WARNING: the camera calibration was made with a different {', '.join(changed) or 'joint map'} "
+                  "(re-levelled, blade offset changed or servos recalibrated since?): ball positions may be off by a few "
+                  "cm. Rerun `uv run python real/calibrate_camera.py` with the ball taped on.")
         px = getattr(model, "ball_px", None)
         size = {"min_r": 0.5 * px, "max_r": 2.5 * px} if px else {}
         finder = BallFinder(CONFIG.get("ball_colour", "orange"), **size)   # rejects the blade and other large blobs
@@ -191,10 +212,8 @@ def main():
         print(f"registers set and read back: {got}")
         print(f"to the hold pose ({A.glide(b, hold, 3.0):.1f} deg)")
         cmd = dict(hold)                                          # trim out the sag so the measured pose is the hold
-        for _ in range(int(3.0 * 50)):                            # slow integral (3/s): the servos lag ~0.1 s
-            pos = A.read_pos(b)
-            for n in A.ARM:
-                cmd[n] = float(np.clip(cmd[n] + 0.06 * (hold[n] - pos[n]), hold[n] - 12, hold[n] + 12))
+        for _ in range(int(SAG_TRIM_S * 50)):
+            cmd = sag_trim_step(cmd, hold, A.read_pos(b), 0.02)
             b.sync_write("Goal_Position", cmd)
             time.sleep(0.02)
         pos = A.read_pos(b)
@@ -227,7 +246,7 @@ def main():
             if launch and a.virtual_start == "rest":
                 launch_q = list(launch)
         else:
-            state, rounds, ignore = "armed", 0, None
+            state, rounds, ignore, t_retrim = "armed", 0, None, None
         period = 1.0 / hz
         t_active = t_next = time.perf_counter()
         last_frame = -1
@@ -357,9 +376,19 @@ def main():
                 s = min(1.0, (now - t_lost) / 0.4)
                 act, goal = np.zeros(5), goal_lost + s * (q_ref + trim - goal_lost)
                 b.sync_write("Goal_Position", sim_to_deg(goal))
-                if s >= 1.0:
-                    state = "armed"
+                if s >= 1.0:                                      # the joints settle off the hold after a try (elbow
+                    state, t_retrim = "armed", now                # up to 2.7 deg): trim the sag again while armed
+                    cmd, target = sim_to_deg(q_ref + trim), sim_to_deg(deg_to_sim(hold) + trim)
             else:
+                if t_retrim is not None:
+                    cmd = sag_trim_step(cmd, target, pos, period)
+                    b.sync_write("Goal_Position", cmd)
+                    q_ref = deg_to_sim(cmd) - trim
+                    if now - t_retrim > SAG_TRIM_S:
+                        t_retrim = None
+                        pitch = sum(pos[n] - target[n] for n in ("shoulder_lift", "elbow_flex", "wrist_flex"))
+                        print(f"  hold re-trimmed: joints within {max(abs(pos[n] - target[n]) for n in A.ARM):.1f} deg, "
+                              f"pitch {pitch:+.1f} deg (lift + elbow + wrist flex)")
                 act, goal = np.zeros(5), q_ref
             log["t"].append(now - t_start)
             log["q_deg"].append([pos[n] for n in A.ARM])

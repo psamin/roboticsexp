@@ -5,6 +5,7 @@ kinematics feeds its degrees straight into the SO-101 URDF (deg2rad), so the def
 every joint; real/config.yaml can override it (`joint_map`), and `sysid.py set-hold` checks it: with the paddle
 levelled by hand, forward kinematics of the measured angles must also say "level".
 """
+import hashlib
 import json
 import math
 import re
@@ -50,6 +51,15 @@ def shift_paddle(kin):
         R = kin.paddle_rot[0]
         kin.paddle_pos += 0.01 * (off[0] * R[:, 0] + off[1] * R[:, 1])
     return kin
+
+
+def calib_inputs():
+    """What the camera calibration's ball positions came from besides the camera: joint map, blade offset and the servo
+    calibration. calibrate_camera.py stores these; the runner warns if any has changed since."""
+    sign, off = _jmap()
+    return {"joint_map_offset_deg": off.tolist(), "joint_map_sign": sign.tolist(),
+            "paddle_offset_cm": [float(v) for v in CONFIG.get("paddle_offset_cm") or (0.0, 0.0)],
+            "servo_calibration_sha1": hashlib.sha1((HERE / CONFIG["follower_calibration"]).read_bytes()).hexdigest()}
 
 
 # ------------------------------------------------------------------ camera
@@ -164,6 +174,61 @@ def lock_camera(cam, cc: dict):
           f"autofocus {'on' if back['auto-focus'] else 'off'} "
           f"(manual = {back['auto-exposure-mode'] == 1}; auto had settled at {settled})")
     return back
+
+
+# ------------------------------------------------------------------ has the camera moved since it was calibrated?
+CAMERA_REF = HERE / "camera_ref.png"     # a frame from when camera_calib.json was made (calibrate_camera.py saves it)
+# Static background: the backdrop and table left of the arm, clear of the arm, paddle, ball, hands and the --record
+# stamp. The --record search box can cross it (x 189 with the 11-04 calibration); that leaves the shift unchanged.
+STATIC_BOX = (0, 40, 200, 300)           # x0, y0, x1, y1
+# Frames from one session register within 2.5 px of each other (auto exposure varying, the mount settling); the
+# camera moves in real/logs are 6-26 px. Chance matches (dark or blocked box) peak below 0.23.
+CAMERA_MOVED_PX = 4.0
+MIN_MATCH = 0.25
+
+
+def image_shift(ref, frame, box=STATIC_BOX):
+    """(dx, dy, peak): how far the static background in frame sits from ref (px, + = right / down), by phase
+    correlation, and the correlation peak (near 1 = same view)."""
+    x0, y0, x1, y1 = box
+    a, b = (cv2.cvtColor(f[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).astype(np.float32) for f in (ref, frame))
+    (dx, dy), peak = cv2.phaseCorrelate(a, b, cv2.createHanningWindow((x1 - x0, y1 - y0), cv2.CV_32F))
+    return dx, dy, peak
+
+
+def fresh_frames(cam, seconds=0.5):
+    """Copies of the new frames that arrive over the next `seconds`."""
+    out, last, t_end = [], cam.get()[2], time.perf_counter() + seconds
+    while time.perf_counter() < t_end:
+        f, _, n = cam.get()
+        if f is not None and n != last:
+            out.append(f.copy())
+            last = n
+        time.sleep(0.01)
+    return out
+
+
+def camera_view_check(frames, ref_path=CAMERA_REF):
+    """(ok, message): does the camera still see the scene as in the reference frame? Uses the best-matching frame, so
+    a hand passing through one does not count. ok is None when there is no reference to compare with."""
+    if not ref_path.exists():
+        return None, (f"WARNING: no {ref_path.name}, so a moved camera goes unnoticed. Recalibrate (calibrate_camera.py "
+                      "saves one), or adopt a frame taken since the last calibration: real/camera_check.py "
+                      "--set-reference [--video real/logs/run-<time>.mp4 --frame N]")
+    ref = cv2.imread(str(ref_path))
+    if not frames:
+        return False, "no camera frame to compare with the reference"
+    if frames[0].shape != ref.shape:
+        return False, f"camera frames are {frames[0].shape[1::-1]}, the calibration's {ref.shape[1::-1]}: check config"
+    dx, dy, peak = max((image_shift(ref, f) for f in frames), key=lambda s: s[2])
+    if peak < MIN_MATCH:
+        return False, (f"CAMERA VIEW DOES NOT MATCH {ref_path.name} (match {peak:.2f}): the camera moved a lot, or the "
+                       "left of the frame is dark or blocked. Recalibrate: uv run python real/calibrate_camera.py")
+    if math.hypot(dx, dy) > CAMERA_MOVED_PX:
+        return False, (f"CAMERA MOVED {math.hypot(dx, dy):.1f} px (dx {dx:+.1f}, dy {dy:+.1f}) since it was calibrated: "
+                       "ball positions are off. Recalibrate: uv run python real/calibrate_camera.py")
+    return True, (f"camera view {math.hypot(dx, dy):.1f} px from the calibration's (limit {CAMERA_MOVED_PX:.0f} px, "
+                  f"match {peak:.2f})")
 
 
 # ------------------------------------------------------------------ ball finder

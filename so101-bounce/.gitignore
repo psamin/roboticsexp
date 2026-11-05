@@ -5,3 +5,4 @@ data/
 real/logs/
 *.pt
 !real/*.pt
+!real/camera_ref.png

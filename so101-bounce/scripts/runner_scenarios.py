@@ -6,7 +6,8 @@ or takes away. Checks the runner's start / lost / re-arm logic in the cases the 
 
 Each scenario runs in real time (~6-9 s after a 3 s settle). Reported per scenario: when the policy switched on
 relative to the ball becoming free, how many bounces the ball made while the policy ran, runner "lost" calls made
-while the ball was still in play, re-arms, and how far the paddle moved while the ball was still held.
+while the ball was still in play, re-arms, how far the paddle moved while the ball was still held, and the paddle's
+pitch (lift + elbow + wrist flex vs the hold pose) at the end of each wait after a try.
 """
 import builtins
 import contextlib
@@ -240,6 +241,8 @@ def run(name, ck, env, hold):
     import bounce_run as R
     R.Camera, R.BallFinder, R.CameraModel = Cam, Finder, Model
     R.camera_index = lambda cc: 0                          # no real camera in the harness
+    R.lock_camera = lambda cam, cc: None                   # (and leave the real camera's settings alone)
+    R.camera_view_check = lambda frames: (True, "harness: no camera view to check")
     builtins.input = fake_input
     sys.argv = ["bounce_run", "--checkpoint", ck, *FLAGS]
     out = io.StringIO()
@@ -247,7 +250,7 @@ def run(name, ck, env, hold):
         R.main()
     text = out.getvalue()
     # times come from the log: first tick of each activation
-    log = sorted((ROOT / "real" / "logs").glob("run-*.npz"))[-1]
+    log = sorted((A.HERE / "logs").glob("run-*.npz"))[-1]
     d = np.load(log, allow_pickle=True)
     t_log, st = d["t"], d["state"]
     t_enter_log = t_log[0]
@@ -257,9 +260,15 @@ def run(name, ck, env, hold):
     active_t = [float(t_log[i] - t_enter_log) for i in range(len(st)) if st[i] == "active"]
     bounces = [b for b in ev["bounces"] if active_t and any(abs(b - a) < 0.03 for a in active_t)]
     false_lost = [x for x in lost if world.in_play(x)]
+    q, pitch = d["q_deg"], []                               # paddle pitch at the end of each wait after a try
+    for i in [i for i in range(1, len(st)) if st[i] == "armed" and st[i - 1] == "returning"]:
+        j = next((k for k in range(i, len(st)) if st[k] != "armed"), len(st))
+        seg = [k for k in range(i, j) if t_log[k] > t_log[j - 1] - 0.5]
+        pitch.append((round(float(t_log[j - 1] - t_log[i]), 1),
+                      round(float(sum(q[seg, c].mean() - hold[rig.ARM[c]] for c in (1, 2, 3))), 2)))   # lift+elbow+flex
     return {"scenario": name, "free_t": ev["free_t"], "policy_on": act_starts, "lost": lost, "false_lost": false_lost,
             "dropped_t": ev["dropped_t"], "bounces": len(bounces), "held_motion_cm": 100 * ev["held_motion"],
-            "log": log.name}
+            "rearm_s_pitch_deg": pitch, "log": log.name}
 
 
 def main():
@@ -275,6 +284,7 @@ def main():
     A.HOLD = tmp / "hold_pose.json"
     A.HOLD.write_text(json.dumps(hold))
     A.glide = lambda b, target, seconds=3.0, hz=50: (b.sync_write("Goal_Position", target), 0.0)[1]
+    A.HERE = tmp                                           # run logs stay out of real/logs
     results = []
     for name in names:
         bus = DelayBus(env, dict(hold))
@@ -285,7 +295,9 @@ def main():
         on = ", ".join(f"{x - fr:+.2f}" if fr is not None else f"{x:.2f}" for x in r["policy_on"]) or "never"
         print(f"{name:44s} on at {on:18s} (s from ball free) | bounces {r['bounces']:2d} | lost calls {len(r['lost'])} "
               f"(in play {len(r['false_lost'])}) | ball fell {'-' if r['dropped_t'] is None else f'{r['dropped_t'] - (fr or 0):.1f} s'}"
-              f" | paddle moved {r['held_motion_cm']:.1f} cm while held", flush=True)
+              f" | paddle moved {r['held_motion_cm']:.1f} cm while held"
+              + (f" | re-armed (s waited, pitch deg): {r['rearm_s_pitch_deg']}" if r["rearm_s_pitch_deg"] else ""),
+              flush=True)
     out = ROOT / "outputs" / "runner_scenarios.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(results, indent=1))
