@@ -1,15 +1,19 @@
 """The arm and the overhead camera behind the calls the planner uses: look() and run_step().
 
-mock  a saved scene image; steps are logged and reported done. No camera, no arm, no Dream credits.
-live  the overhead camera; each step runs so101/dream_run.py --live with the step as Dream-1's task, only after the
-      user types y. Every step is a billed Dream episode: dream_run.py makes one warm-up call, then about one call a
-      second (so101/DREAM_DEBUG_LOG.md: 83 calls in 83 s). An API key cannot read the balance, so both robots
-      count estimated calls against a per-session cap.
+mock    a saved scene image; steps are logged and reported done. Free.
+camera  the live overhead camera; steps are not run (plan only). Free.
+dry     the live camera; each step runs Dream-1 through so101/dream_run.py without --live: real inference, the arm
+        does not move. Billed.
+live    the same with --live: Dream-1 moves the arm. Billed.
+dry and live steps run only after the user confirms. dream_run.py makes one warm-up call, then about one call a
+second (so101/DREAM_DEBUG_LOG.md: 83 calls in 83 s). An API key cannot read the balance, so the robots count
+estimated calls against a per-session cap.
 """
 import base64
 import os
 import shlex
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -19,7 +23,8 @@ HERE = Path(__file__).resolve().parent
 SO101 = HERE.parent / "so101"
 DREAM_PY = Path(os.environ.get("DREAM_PY", Path.home() / "dream-env/bin/python"))
 MOCK_SCENE = SO101 / "logs/dream-dry-20261020-232914/chunk1_scene.jpg"   # bottle, cup, box and plate on the table
-FRONT_CAMERA = int(os.environ.get("FRONT_CAMERA", 0))                      # so101/env.sh: front (C920) is index 0
+FRONT_CAMERA = int(os.environ.get("FRONT_CAMERA", 0))      # overhead C920 (checked 2026-11-05: 1 wrist, 2 laptop)
+WRIST_CAMERA = int(os.environ.get("WRIST_CAMERA", 1))
 
 
 def step_calls(seconds):
@@ -46,6 +51,49 @@ def jpeg_b64(img, width=640):
     return base64.b64encode(cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes()).decode()
 
 
+class CameraHub:
+    """The overhead camera, read continuously on a thread for look() and the page's video. Released while
+    dream_run.py runs a step (it opens the cameras itself)."""
+
+    def __init__(self, index=FRONT_CAMERA, size=(1280, 720)):
+        self.index, self.size, self.frame, self.at, self.paused, self.cap = index, size, None, 0.0, False, None
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        while True:
+            if self.paused:
+                if self.cap is not None:
+                    self.cap.release()
+                    self.cap = None
+                time.sleep(0.1)
+                continue
+            if self.cap is None:
+                self.cap = cv2.VideoCapture(self.index)
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.size[0])
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.size[1])
+            ok, img = self.cap.read()
+            if ok:
+                self.frame, self.at = img, time.time()
+            else:
+                time.sleep(0.05)
+
+    def latest(self, timeout=5.0):
+        t0 = time.time()
+        while self.frame is None:
+            if self.paused or time.time() - t0 > timeout:
+                raise RuntimeError(f"overhead camera {self.index} gave no frame")
+            time.sleep(0.05)
+        return self.frame
+
+    def pause(self):
+        self.paused = True
+        while self.cap is not None:
+            time.sleep(0.05)
+
+    def resume(self):
+        self.frame, self.paused = None, False
+
+
 class MockRobot:
     live = False
 
@@ -67,16 +115,19 @@ class MockRobot:
 
 
 class LiveRobot:
-    """dream_run.py opens the cameras and the arm itself, so look() releases the camera before any step runs."""
+    """mode camera / dry / live (see the top of this file)."""
     live = True
 
-    def __init__(self, dream_args="", confirm=input, max_calls=100):
+    def __init__(self, dream_args="", confirm=input, max_calls=100, mode="live", hub=None, frames_url=None):
+        """frames_url: dream_run.py reads both cameras from that server (web.py) instead of opening them."""
         self.dream_args, self.confirm, self.steps = shlex.split(dream_args), confirm, []
-        self.budget = Budget(max_calls)
+        self.budget, self.mode, self.hub, self.frames_url = Budget(max_calls), mode, hub, frames_url
         a = self.dream_args
         self.side = a[a.index("--side") + 1] if "--side" in a else "left"      # dream_run.py's default arm
 
     def look(self):
+        if self.hub is not None:
+            return jpeg_b64(self.hub.latest())
         cap = cv2.VideoCapture(FRONT_CAMERA)
         try:
             for _ in range(10):                                  # let auto exposure settle
@@ -88,17 +139,36 @@ class LiveRobot:
             cap.release()
 
     def run_step(self, step, seconds):
+        if self.mode == "camera":
+            return (f"not run (camera-only mode: no Dream, no arm): {step!r}. The photo will not change; treat the "
+                    "step as having worked.")
         task = step if " arm" in step.lower() else f"{step.rstrip('.')} with the {self.side} arm"   # docs: name the arm
-        cmd = [str(DREAM_PY), str(SO101 / "dream_run.py"), "--live", "--task", task, "--seconds", str(seconds),
-               *self.dream_args]
+        cmd = [str(DREAM_PY), str(SO101 / "dream_run.py"), *(["--live"] if self.mode == "live" else []),
+               "--task", task, "--seconds", str(seconds), *self.dream_args,
+               *(["--frames", self.frames_url] if self.frames_url else [])]
         if step_calls(seconds) > self.budget.left:
             return self.budget.take(seconds)
+        what = ("run it on the arm (arm resting, hand on its power switch, workspace clear)" if self.mode == "live"
+                else "run Dream-1 on it (the arm does not move)")
         print(f"\n  next step: {task!r} ({seconds:.0f} s, about {step_calls(seconds)} billed calls, "
               f"{self.budget.left} left this session)\n  {shlex.join(cmd)}")
-        if self.confirm("  run it on the arm? [y/N] ").strip().lower() != "y":
+        if self.confirm(f"  {what}? [y/N] ").strip().lower() != "y":
             return "skipped: the user did not confirm this step"
         self.budget.take(seconds)
         self.steps.append(task)
         t0 = time.time()
-        r = subprocess.run(cmd, cwd=SO101)
-        return f"{'finished' if r.returncode == 0 else f'failed (exit {r.returncode})'} after {time.time() - t0:.0f} s"
+        share = self.frames_url is not None                     # else dream_run.py opens the cameras itself
+        if self.hub is not None and not share:
+            self.hub.pause()
+        log = HERE / "logs" / f"step-{time.strftime('%Y%m%d-%H%M%S')}-{self.mode}.log"
+        log.parent.mkdir(exist_ok=True)
+        try:
+            with open(log, "w") as f:                       # the user's yes above answers dream_run.py's LIVE prompt
+                r = subprocess.run(cmd, cwd=SO101, stdout=f, stderr=subprocess.STDOUT, input="\n", text=True)
+        finally:
+            if self.hub is not None and not share:
+                self.hub.resume()
+        done = "finished" if r.returncode == 0 else f"failed (exit {r.returncode})"
+        tail = " | ".join(l.strip() for l in log.read_text().splitlines()[-3:] if l.strip())
+        return (f"{done} after {time.time() - t0:.0f} s" + ("" if self.mode == "live" else " (dry run: the arm did "
+                "not move)") + f". dream_run.py: {tail[-300:]} (log {log.name})")

@@ -1,8 +1,10 @@
 """The fetch agent in a browser page: the page hears you (it asks for the microphone itself), shows what the agent
 sees and does, speaks its answers, and has Run / Skip buttons for real arm steps.
 
-  uv run python web.py                  # mock robot; open http://127.0.0.1:8000
-  uv run python web.py --robot live     # the real arm (each step still needs Run, or a spoken "yes")
+  uv run python web.py                  # live overhead camera, plan only (free); open http://127.0.0.1:8000
+  uv run python web.py --robot dry      # + Dream-1 inference per step, the arm does not move (billed)
+  uv run python web.py --robot live     # + Dream-1 moves the arm (billed; each step needs Run or a spoken "yes")
+  uv run python web.py --robot mock     # a saved photo instead of the camera
 
 The page detects speech itself and sends only finished utterances (WAV) here; this server sends them to Deepgram
 (the key stays on this Mac) and the transcript to the planner. Served on 127.0.0.1 only.
@@ -17,13 +19,14 @@ import time
 import wave
 from pathlib import Path
 
+import cv2
 import numpy as np
 from aiohttp import WSMsgType, web
 from claude_agent_sdk import ClaudeSDKClient
 
 import voice
 from agent import options, turn
-from robot import MOCK_SCENE, LiveRobot, MockRobot
+from robot import FRONT_CAMERA, MOCK_SCENE, WRIST_CAMERA, CameraHub, LiveRobot, MockRobot
 
 HERE = Path(__file__).resolve().parent
 YES = re.compile(r"^\W*(yes|yeah|yep|go|go ahead|do it|run it|okay|ok|sure)\b", re.I)
@@ -47,7 +50,7 @@ class Session:
                 self.sockets.discard(ws)
 
     async def status(self):
-        await self.emit({"type": "status", "busy": self.busy, "robot": "live" if self.robot.live else "mock",
+        await self.emit({"type": "status", "busy": self.busy, "robot": getattr(self.robot, "mode", "mock"),
                          "calls_left": self.robot.budget.left, "total_cost": self.cost, "wake": self.wake})
 
     def confirm(self, question):
@@ -106,6 +109,46 @@ class Session:
             await self.emit({"type": "ignored", "text": text, "wake": self.wake})
 
 
+def frame_jpeg(session):
+    hub = getattr(session.robot, "hub", None)
+    if hub is None:
+        img = cv2.imread(str(session.robot.scene))
+    elif hub.paused or hub.frame is None:
+        img = np.full((360, 640, 3), 40, np.uint8)
+        cv2.putText(img, "camera in use by Dream-1" if hub.paused else "starting camera...", (150, 190),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+    else:
+        img = hub.frame
+    img = cv2.resize(img, (640, round(img.shape[0] * 640 / img.shape[1])))
+    return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 75])[1].tobytes()
+
+
+async def video(request):
+    """MJPEG stream of the overhead camera (~10 fps) for the page."""
+    resp = web.StreamResponse(headers={"Content-Type": "multipart/x-mixed-replace; boundary=frame",
+                                       "Cache-Control": "no-cache"})
+    await resp.prepare(request)
+    try:
+        while True:
+            jpg = await asyncio.to_thread(frame_jpeg, request.app["session"])
+            await resp.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(jpg)).encode()
+                             + b"\r\n\r\n" + jpg + b"\r\n")
+            await asyncio.sleep(0.1)
+    except (ConnectionResetError, asyncio.CancelledError):
+        pass
+    return resp
+
+
+async def frame(request):
+    """Newest frame of one camera for so101/dream_run.py --frames (X-Frame-Age: seconds since capture)."""
+    hub = request.app["hubs"].get(request.match_info["name"])
+    if hub is None or hub.frame is None:
+        raise web.HTTPServiceUnavailable()
+    img, at = hub.frame, hub.at
+    jpg = await asyncio.to_thread(lambda: cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tobytes())
+    return web.Response(body=jpg, content_type="image/jpeg", headers={"X-Frame-Age": f"{time.time() - at:.4f}"})
+
+
 async def index(request):
     return web.FileResponse(HERE / "static/index.html")
 
@@ -125,6 +168,10 @@ async def socket(request):
                 asyncio.create_task(s.request(m["text"].strip()))
             elif m["type"] == "confirm":
                 s.answer(bool(m["ok"]), m.get("id"))
+            elif m["type"] == "mode" and isinstance(s.robot, LiveRobot) and m["mode"] in ("camera", "dry", "live"):
+                s.robot.mode = m["mode"]                # each dry / live step still needs Run or a spoken yes
+                await s.emit({"type": "note", "text": f"mode: {m['mode']}"})
+                await s.status()
             elif m["type"] == "wake":
                 s.wake = m["word"]
                 await s.status()
@@ -145,7 +192,7 @@ async def stop(app):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--robot", choices=("mock", "live"), default="mock")
+    ap.add_argument("--robot", choices=("camera", "dry", "live", "mock"), default="camera")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--wake", default="robot", help="word a request must contain ('' for none)")
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
@@ -155,12 +202,21 @@ def main():
     ap.add_argument("--model", default="sonnet")
     args = ap.parse_args()
     session = Session(None, args)
+    hubs = {}
+    if args.robot != "mock":                    # one owner per camera, at the size the Dream model was set up for
+        fine_tune = "dream-1-ft" in args.dream_args
+        hubs = {"front": CameraHub(FRONT_CAMERA, (640, 480) if fine_tune else (1280, 720)),
+                "wrist": CameraHub(WRIST_CAMERA, (640, 480))}
     session.robot = (MockRobot(args.scene, max_calls=args.max_calls) if args.robot == "mock"
-                     else LiveRobot(args.dream_args, confirm=session.confirm, max_calls=args.max_calls))
+                     else LiveRobot(args.dream_args, confirm=session.confirm, max_calls=args.max_calls,
+                                    mode=args.robot, hub=hubs["front"],
+                                    frames_url=f"http://127.0.0.1:{args.port}"))
     app = web.Application()
-    app["session"] = session
+    app["session"], app["hubs"] = session, hubs
     app.router.add_get("/", index)
     app.router.add_get("/ws", socket)
+    app.router.add_get("/video.mjpg", video)
+    app.router.add_get("/frame/{name}", frame)
     app.on_startup.append(start)
     app.on_cleanup.append(stop)
     print(f"dream-agent ({args.robot} robot): open http://127.0.0.1:{args.port}")

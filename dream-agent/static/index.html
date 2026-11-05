@@ -23,6 +23,7 @@
   .app { max-width: 760px; margin: 0 auto; padding: 16px; min-height: 100vh; display: flex; flex-direction: column; gap: 14px; }
   header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   h1 { font-size: 18px; margin: 0 6px 0 0; }
+  select { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px 6px; }
   .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
   .badge.live { color: var(--live); border-color: var(--live); }
   .stat { font-size: 13px; color: var(--muted); }
@@ -31,6 +32,9 @@
   .dot.on { background: var(--ok); }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
   .mic { display: flex; align-items: center; gap: 16px; }
+  .cam { padding: 10px; }
+  .cam-head { display: flex; gap: 8px; align-items: baseline; margin: 0 4px 8px; }
+  #video { width: 100%; border-radius: 8px; display: block; background: var(--robot); aspect-ratio: 16 / 9; object-fit: cover; }
   #micBtn { width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer; flex: none;
             background: var(--robot); color: var(--ink); font-size: 30px; transition: transform .1s; }
   #micBtn.on { background: var(--accent); color: var(--accent-ink); }
@@ -71,11 +75,21 @@
   <header>
     <h1>Robot</h1>
     <span id="mode" class="badge">mock</span>
+    <select id="modeSel" title="camera: plan only (free) · dry: Dream-1 runs, arm still (billed) · live: arm moves (billed)">
+      <option value="camera">camera: plan only</option>
+      <option value="dry">dry: Dream-1, arm still</option>
+      <option value="live">live: Dream-1 moves the arm</option>
+    </select>
     <span class="stat"><span id="conn" class="dot"></span></span>
     <span class="spacer"></span>
     <span class="stat">Dream calls left <b id="calls">–</b></span>
-    <span class="stat">Claude <b id="cost">$0.00</b></span>
+    <span class="stat" title="API-price estimate of the tokens; on your subscription it counts against the plan's usage limit and is not charged">Claude usage ≈<b id="cost">$0.00</b> <span class="hint">(plan, not billed)</span></span>
   </header>
+
+  <div class="panel cam">
+    <div class="cam-head"><b id="camTitle">Overhead camera</b><span class="hint" id="camNote"></span></div>
+    <img id="video" src="/video.mjpg" alt="overhead camera">
+  </div>
 
   <div class="panel mic">
     <button id="micBtn" title="Start or stop listening" aria-label="Microphone">🎙</button>
@@ -134,7 +148,13 @@ function handle(ev) {
     case "status":
       busy = ev.busy;
       $("mode").textContent = ev.robot;
-      $("mode").classList.toggle("live", ev.robot === "live");
+      $("modeSel").style.display = ev.robot === "mock" ? "none" : "";
+      if (ev.robot !== "mock") $("modeSel").value = ev.robot;
+      $("mode").classList.toggle("live", ev.robot === "live" || ev.robot === "dry");
+      $("camTitle").textContent = ev.robot === "mock" ? "Saved photo (mock mode)" : "Overhead camera, live";
+      $("camNote").textContent = {mock: "no camera, no Dream", camera: "plans only: no Dream, the arm stays still",
+                                  dry: "Dream-1 runs each step, the arm stays still (billed)",
+                                  live: "Dream-1 moves the arm (billed)"}[ev.robot] || "";
       $("calls").textContent = ev.calls_left;
       $("cost").textContent = "$" + ev.total_cost.toFixed(2);
       if (document.activeElement !== $("wake")) $("wake").value = ev.wake;
@@ -188,6 +208,13 @@ $("typeForm").onsubmit = e => {
   $("typeBox").value = "";
 };
 $("wake").onchange = () => send({ type: "wake", word: $("wake").value.trim() });
+$("modeSel").onchange = () => {
+  const m = $("modeSel").value;
+  if (m === "live" && !confirm("Live: Dream-1 will move the arm (each step still asks Run / Skip). Switch?")) {
+    $("modeSel").value = $("mode").textContent; return;
+  }
+  send({ type: "mode", mode: m });
+};
 
 // ---------- speech out (the browser's own voice, free) ----------
 function speak(text) {

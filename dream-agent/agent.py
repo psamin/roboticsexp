@@ -16,7 +16,7 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKCli
                               ToolUseBlock, create_sdk_mcp_server, tool)
 
 import voice
-from robot import MOCK_SCENE, LiveRobot, MockRobot
+from robot import MOCK_SCENE, CameraHub, LiveRobot, MockRobot
 
 HERE = Path(__file__).resolve().parent
 
@@ -119,7 +119,8 @@ async def run(args, robot, speak, listen, answered=lambda: None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--robot", choices=("mock", "live"), default="mock")
+    ap.add_argument("--robot", choices=("mock", "camera", "dry", "live"), default="mock",
+                    help="mock: saved photo; camera: live camera, plan only; dry: + Dream-1, arm still; live: arm moves")
     ap.add_argument("--voice", action="store_true", help="hands-free spoken requests and spoken answers")
     ap.add_argument("--mic", help="input device index or name part (default: the system's default input)")
     ap.add_argument("--wake", default="robot", help="word a request must contain ('' for none)")
@@ -132,7 +133,7 @@ def main():
     ap.add_argument("--quiet", action="store_true", help="print answers instead of speaking them")
     args = ap.parse_args()
     robot = (MockRobot(args.scene, max_calls=args.max_calls) if args.robot == "mock"
-             else LiveRobot(args.dream_args, max_calls=args.max_calls))
+             else LiveRobot(args.dream_args, max_calls=args.max_calls, mode=args.robot, hub=CameraHub()))
     speak = (lambda t: None) if args.quiet or not args.voice else voice.say
     mic = int(args.mic) if args.mic and args.mic.isdigit() else args.mic
     listener = voice.Listener(mic, args.wake)

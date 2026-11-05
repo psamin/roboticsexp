@@ -39,6 +39,7 @@ import pathlib
 import sys
 import threading
 import time
+import urllib.request
 
 import cv2
 import numpy as np
@@ -102,6 +103,44 @@ class Camera:
         self._running = False
         self._thread.join(timeout=1.0)
         self._cap.release()
+
+
+class HubCamera:
+    """The newest frame of one camera from dream-agent's web app (GET <url>/frame/<name>), which owns the cameras so
+    its page, its planner and this loop share them. Same interface as Camera; the age comes from the server."""
+
+    def __init__(self, url: str, name: str, rotate: int | None, size: tuple[int, int] | None = None) -> None:
+        self._url, self._rotate, self._size, self._warned = f"{url.rstrip('/')}/frame/{name}", rotate, size, False
+        self._lock = threading.Lock()
+        self._frame, self._at = None, 0.0
+        self._running = True
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while self._running:
+            try:
+                with urllib.request.urlopen(self._url, timeout=1.0) as reply:
+                    data, age = reply.read(), float(reply.headers.get("X-Frame-Age", 0))
+                image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+                if self._size and not self._warned and (image.shape[1], image.shape[0]) != tuple(self._size):
+                    print(f"{self._url}: asked for {self._size[0]}x{self._size[1]}, got {image.shape[1]}x{image.shape[0]}")
+                    self._warned = True
+                if self._rotate is not None:
+                    image = cv2.rotate(image, self._rotate)
+                with self._lock:
+                    self._frame, self._at = image, time.monotonic() - age
+            except (OSError, ValueError, cv2.error):
+                time.sleep(0.2)
+            time.sleep(1 / 15)
+
+    def latest(self) -> tuple[np.ndarray | None, float]:
+        with self._lock:
+            return self._frame, self._at
+
+    def close(self) -> None:
+        self._running = False
+        self._thread.join(timeout=1.5)
 
 
 class ReadOnlyArm:
@@ -440,6 +479,8 @@ def main() -> None:
     parser.add_argument("--front", type=int, default=0, help="OpenCV index of the top camera (env.sh)")
     parser.add_argument("--wrist", type=int, default=1, help="OpenCV index of the wrist camera (env.sh)")
     parser.add_argument("--port", default=PORT)
+    parser.add_argument("--frames", help="read both cameras from dream-agent's web app at this URL "
+                                         "(e.g. http://127.0.0.1:8000) instead of opening them")
     parser.add_argument("--checkpoint", default=CHECKPOINT)
     args = parser.parse_args()
 
@@ -480,8 +521,12 @@ def main() -> None:
     stale = 0
     ended = "ran to its time limit"
     try:
-        cameras = [Camera(args.front, cv2.ROTATE_180 if args.flip_scene else None, model.front_size),
-                   Camera(args.wrist, model.wrist_rotate)]
+        if args.frames:                                  # cameras owned by dream-agent's web app
+            cameras = [HubCamera(args.frames, "front", cv2.ROTATE_180 if args.flip_scene else None, model.front_size),
+                       HubCamera(args.frames, "wrist", model.wrist_rotate, (640, 480))]
+        else:
+            cameras = [Camera(args.front, cv2.ROTATE_180 if args.flip_scene else None, model.front_size),
+                       Camera(args.wrist, model.wrist_rotate)]
         client.policy(model.policy())
         time.sleep(3.0)  # let the C920 deliver and settle (env.sh warmup_s)
         probe = ReadOnlyArm(args.port, calibration)  # the pose for the warm-up call, motors untouched
