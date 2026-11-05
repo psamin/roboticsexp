@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-RATE = 16000
+RATE = 48000        # the MacBook microphone's own rate (Deepgram bills by duration, not size)
 MIN_S = 0.4          # shorter clips are dropped without a request
 MIN_RMS = 200        # int16 RMS: below this the clip is silence
 DEEPGRAM = "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en"

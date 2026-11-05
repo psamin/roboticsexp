@@ -17,10 +17,10 @@ def test_silence_and_short_clips_are_never_sent():
     assert voice.worth_sending((3000 * np.sin(2 * np.pi * 220 * t)).astype(np.int16))   # one second of tone
 
 
-def test_wav_is_16k_mono_int16():
+def test_wav_is_mono_int16_at_the_mic_rate():
     audio = (1000 * np.ones(1600)).astype(np.int16)
     with wave.open(io.BytesIO(voice.to_wav(audio))) as w:
-        assert (w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()) == (16000, 1, 2, 1600)
+        assert (w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()) == (voice.RATE, 1, 2, 1600)
 
 
 def test_transcribe_sends_one_request_with_the_key(monkeypatch):
