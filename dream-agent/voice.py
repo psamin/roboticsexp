@@ -1,22 +1,34 @@
-"""Push-to-talk speech in, macOS speech out.
+"""Hands-free speech in, macOS speech out.
 
-listen() records only between two Enter presses, then sends that one clip to Deepgram. Nothing is streamed or sent
-while you are not talking; clips under MIN_S or near-silent are dropped without a request. say() uses macOS `say`
-(free, on-device).
+Listener.listen() reads the microphone locally and keeps only speech: a stretch starts when the level stays above
+the room's background (tracked continuously) for 150 ms and ends after 0.8 s of quiet. Only that stretch goes to
+Deepgram, one request per utterance; silence and clips under MIN_S are never sent. A request has to contain the wake
+word (default "robot"; loose match, since speech recognition mangles it) unless it comes within FOLLOW_UP_S of the
+last answer. say() uses macOS `say` (free, on-device).
 """
 import io
 import json
+import queue
+import re
 import subprocess
+import time
 import urllib.request
 import wave
+from collections import deque
 from pathlib import Path
 
 import numpy as np
 
 RATE = 48000        # the MacBook microphone's own rate (Deepgram bills by duration, not size)
-MIN_S = 0.4          # shorter clips are dropped without a request
-MIN_RMS = 200        # int16 RMS: below this the clip is silence
+FRAME_S = 0.03
+MIN_S = 0.4         # shorter clips are dropped without a request
+MIN_RMS = 150       # int16 RMS a voice must exceed whatever the background
+START_S, END_S, MAX_S = 0.15, 0.8, 15.0
+FOLLOW_UP_S = 20.0  # after an answer, the next utterance needs no wake word
 DEEPGRAM = "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en"
+MIC_DENIED = ("the microphone gives pure silence: macOS has not allowed this app to use it. System Settings -> "
+              "Privacy & Security -> Microphone: turn on your terminal app (Terminal, iTerm or Visual Studio Code), "
+              "then quit and reopen it.")
 
 
 def deepgram_key(env=Path(__file__).resolve().parent / ".env"):
@@ -26,18 +38,12 @@ def deepgram_key(env=Path(__file__).resolve().parent / ".env"):
     raise KeyError(f"DEEPGRAM_API_KEY not in {env}")
 
 
-def record():
-    """Int16 mono samples between two Enter presses."""
-    import sounddevice as sd
-    chunks = []
-    input("  [Enter] to talk ")
-    with sd.InputStream(samplerate=RATE, channels=1, dtype="int16", callback=lambda d, *_: chunks.append(d.copy())):
-        input("  listening... [Enter] when done ")
-    return np.concatenate(chunks)[:, 0] if chunks else np.zeros(0, np.int16)
+def rms(x):
+    return float(np.sqrt(np.mean(x.astype(np.float64) ** 2))) if len(x) else 0.0
 
 
 def worth_sending(audio):
-    return len(audio) >= MIN_S * RATE and float(np.sqrt(np.mean(audio.astype(np.float64) ** 2))) >= MIN_RMS
+    return len(audio) >= MIN_S * RATE and rms(audio) >= MIN_RMS
 
 
 def to_wav(audio):
@@ -56,12 +62,73 @@ def transcribe(audio, key=None):
     return res["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
 
 
-def listen():
-    audio = record()
-    if not worth_sending(audio):
-        print("  (too short or silent: nothing sent)")
-        return ""
-    return transcribe(audio)
+class Segmenter:
+    """Frame-by-frame speech detector: feed() returns the utterance (int16 samples) when one ends, else None."""
+
+    def __init__(self):
+        self.floor, self.pre = None, deque(maxlen=int(0.4 / FRAME_S))
+        self.seg, self.voiced, self.quiet = None, 0, 0
+
+    def feed(self, f):
+        level = rms(f)
+        if self.seg is None:
+            self.floor = level if self.floor is None else 0.98 * self.floor + 0.02 * level   # room background
+            self.pre.append(f)
+            self.voiced = self.voiced + 1 if level > max(MIN_RMS, 3 * self.floor) else 0
+            if self.voiced * FRAME_S >= START_S:
+                self.seg, self.quiet = list(self.pre), 0
+            return None
+        self.seg.append(f)
+        self.quiet = self.quiet + 1 if level < max(MIN_RMS, 3 * self.floor) else 0
+        if self.quiet * FRAME_S < END_S and len(self.seg) * FRAME_S < MAX_S:
+            return None
+        out, self.seg, self.voiced = np.concatenate(self.seg), None, 0
+        self.pre.clear()
+        return out
+
+
+def heard_wake(text, wake):
+    """Loose match: Deepgram may write 'robot' as 'robo', 'rob it', 'row bot'."""
+    if not wake:
+        return True
+    w = re.sub(r"[^a-z]", "", wake.lower())
+    t = re.sub(r"[^a-z]", "", text.lower())
+    return w in t or (w == "robot" and any(v in t for v in ("robo", "robit", "rowbot", "roabot", "robbot")))
+
+
+class Listener:
+    def __init__(self, device=None, wake="robot"):
+        self.device, self.wake, self.last_answer = device, wake, -1e9
+
+    def answered(self):
+        self.last_answer = time.time()
+
+    def utterance(self):
+        import sounddevice as sd
+        q, seg, zeros = queue.Queue(), Segmenter(), 0
+        with sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=int(RATE * FRAME_S),
+                            device=self.device, callback=lambda d, *_: q.put(d[:, 0].copy())):
+            while True:
+                f = q.get()
+                zeros = zeros + 1 if not f.any() else 0
+                if zeros * FRAME_S > 2.0:
+                    raise SystemExit(MIC_DENIED)
+                if (out := seg.feed(f)) is not None:
+                    return out
+
+    def listen(self):
+        """Blocks until someone says a request; returns its transcript."""
+        while True:
+            audio = self.utterance()
+            if not worth_sending(audio):
+                continue
+            text = transcribe(audio)
+            if not text:
+                continue
+            follow_up = time.time() - self.last_answer < FOLLOW_UP_S
+            if follow_up or heard_wake(text, self.wake):
+                return text
+            print(f"  (heard {text!r}: no '{self.wake}', ignored)")
 
 
 def say(text):

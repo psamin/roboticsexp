@@ -17,6 +17,33 @@ def test_silence_and_short_clips_are_never_sent():
     assert voice.worth_sending((3000 * np.sin(2 * np.pi * 220 * t)).astype(np.int16))   # one second of tone
 
 
+def frames(audio):
+    n = int(voice.RATE * voice.FRAME_S)
+    return [audio[k:k + n] for k in range(0, len(audio) - n + 1, n)]
+
+
+def test_segmenter_cuts_out_the_speech_only():
+    rng = np.random.default_rng(0)
+    room = lambda s: (40 * rng.standard_normal(int(s * voice.RATE))).astype(np.int16)      # quiet room
+    t = np.arange(int(1.5 * voice.RATE)) / voice.RATE
+    speech = (3000 * np.sin(2 * np.pi * 200 * t)).astype(np.int16)
+    seg, outs = voice.Segmenter(), []
+    for f in frames(np.concatenate([room(2.0), speech, room(2.0)])):
+        if (o := seg.feed(f)) is not None:
+            outs.append(o)
+    assert len(outs) == 1
+    assert 1.5 <= len(outs[0]) / voice.RATE <= 1.5 + 0.4 + voice.END_S + 0.1           # speech + pre-roll + tail
+    seg = voice.Segmenter()
+    assert all(seg.feed(f) is None for f in frames(room(5.0)))                          # room noise alone: nothing
+
+
+def test_wake_word_is_matched_loosely():
+    assert voice.heard_wake("Robot, hand me the bottle", "robot")
+    assert voice.heard_wake("Rob it hand me the bottle", "robot")
+    assert not voice.heard_wake("pass me the salt", "robot")
+    assert voice.heard_wake("pass me the salt", "")
+
+
 def test_wav_is_mono_int16_at_the_mic_rate():
     audio = (1000 * np.ones(1600)).astype(np.int16)
     with wave.open(io.BytesIO(voice.to_wav(audio))) as w:

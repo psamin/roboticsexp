@@ -2,7 +2,7 @@
 steps and Dream-1 does each one on the SO-101.
 
   uv run python agent.py                         # type requests; mock robot (no arm, no camera, no Dream credits)
-  uv run python agent.py --voice                 # push-to-talk (Deepgram only while you talk); answers spoken
+  uv run python agent.py --voice                 # hands-free: "robot, hand me the bottle"; answers spoken
   uv run python agent.py --robot live --voice    # the real arm: every step asks y/N before Dream-1 moves it
   uv run python agent.py --once "hand me the medicine bottle"
 
@@ -31,6 +31,9 @@ each step costs money, so use as few steps as possible. Your job:
    visible object and one visible target, in the style "Put the medicine bottle on the plate" or "Put the apple
    into the bowl". Use the plainest everyday names for things. No pronouns, no multi-part steps, no reasoning.
 3. "Give it to me", "bring me", "hand me" mean: put the object on {handoff} (the user's hand-off spot).
+The user's words come from speech recognition and may be garbled or misheard ("hand me the medicine bottom" means the
+medicine bottle). Work out the most likely request from the words and what you see; ask only if you truly cannot
+tell. "Robot" at the start is just how the user gets your attention.
 4. Before the first step, say() the plan in one short sentence. Then run_step() each step in order.
 5. If look() shows a step did not work, retry it once with the same wording; if it fails again, stop and say() so.
 6. If an object you need is not visible or the request is unsafe or impossible for one small arm (heavy, liquids
@@ -60,7 +63,7 @@ def make_tools(robot, speak):
     return [look, run_step, say]
 
 
-async def run(args, robot, speak, listen):
+async def run(args, robot, speak, listen, answered=lambda: None):
     names = ("look", "run_step", "say")
     options = ClaudeAgentOptions(
         system_prompt=system_prompt(args.handoff), model=args.model, cwd=str(HERE), max_turns=40,
@@ -85,6 +88,7 @@ async def run(args, robot, speak, listen):
                             print(f"  (claude) {block.text.strip()}")
                 elif isinstance(msg, ResultMessage) and msg.total_cost_usd:
                     print(f"  [{msg.num_turns} turns, ${msg.total_cost_usd:.3f} of Claude usage]")
+            answered()
             if args.once:
                 break
 
@@ -92,7 +96,9 @@ async def run(args, robot, speak, listen):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--robot", choices=("mock", "live"), default="mock")
-    ap.add_argument("--voice", action="store_true", help="push-to-talk input and spoken answers")
+    ap.add_argument("--voice", action="store_true", help="hands-free spoken requests and spoken answers")
+    ap.add_argument("--mic", help="input device index or name part (default: the system's default input)")
+    ap.add_argument("--wake", default="robot", help="word a request must contain ('' for none)")
     ap.add_argument("--once", help="run one request and exit")
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
     ap.add_argument("--dream-args", default="", help="live: extra so101/dream_run.py flags, e.g. '--checkpoint ...'")
@@ -104,11 +110,18 @@ def main():
     robot = (MockRobot(args.scene, max_calls=args.max_calls) if args.robot == "mock"
              else LiveRobot(args.dream_args, max_calls=args.max_calls))
     speak = (lambda t: None) if args.quiet or not args.voice else voice.say
-    listen = voice.listen if args.voice else (lambda: input("you: "))
-    print(f"dream-agent: {args.robot} robot, {'push-to-talk (Enter, speak, Enter)' if args.voice else 'type a request'};"
-          " say or type 'quit' to stop, Ctrl-C any time")
+    mic = int(args.mic) if args.mic and args.mic.isdigit() else args.mic
+    listener = voice.Listener(mic, args.wake)
+    listen = listener.listen if args.voice else (lambda: input("you: "))
+    if args.voice:
+        import sounddevice as sd
+        how = (f"listening on {sd.query_devices(mic, 'input')['name']}: say "
+               + (f"'{args.wake}, ...'" if args.wake else "your request"))
+    else:
+        how = "type a request"
+    print(f"dream-agent: {args.robot} robot, {how}; 'quit' to stop, Ctrl-C any time")
     try:
-        asyncio.run(run(args, robot, speak, listen))
+        asyncio.run(run(args, robot, speak, listen, listener.answered))
     except (KeyboardInterrupt, EOFError):
         print("\nstopped")
     if robot.steps:
