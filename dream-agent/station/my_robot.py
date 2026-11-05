@@ -43,8 +43,10 @@ DOF = 6
 ## Targets stay this far inside each joint's real calibrated range: so101_faas's URDF lets the shoulder pan and the
 ## wrist flex 5-6 deg past this arm's stops, and dream's solve trusts the URDF (docs, "On another arm": Safety).
 JOINT_MARGIN_DEG = 8.0
-## Fastest a joint target may move, whatever the model asks.
-MAX_JOINT_SPEED_DEG_S = 60.0
+## Fastest a joint target may move, whatever the model asks: above the 90th percentile of what dream's IK asked on
+## 2026-11-05 (75 deg/s), so the arm keeps up with the plan; a cap below it (60) held 11-17 % of rows back, the arm
+## lagged, and the model, which anchors each chunk on where the hand is, drifted further each chunk.
+MAX_JOINT_SPEED_DEG_S = 90.0
 ## The joint ranges this arm's own demonstrations used (flyingturtleboop/so101_medicine_bottle_pickplace, 7824
 ## frames, p0.5-p99.5, model units, degrees), widened by DEMO_MARGIN_DEG. dream's IK reached far or awkward hand
 ## targets by flipping to an elbow-backwards pose the demos never use (elbow down to -108 deg in 32 of 93 replies on
