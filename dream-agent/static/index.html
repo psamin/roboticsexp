@@ -37,6 +37,10 @@
   .guide { display: none; gap: 8px; margin-bottom: 8px; }
   .guide.show { display: grid; grid-template-columns: 1fr 1fr; }
   .guide figure { margin: 0; }
+  .guide .frame { position: relative; }
+  /* where this arm's shoulder belongs in Dream's view: so101_faas's base, projected through a camera fit to Dream's photo */
+  .guide .ring { position: absolute; left: 71.4%; top: 57.2%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+    border: 2px solid #3ddc84; border-radius: 50%; pointer-events: none; }
   .guide img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; display: block; }
   .guide figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
   @media (max-width: 560px) { .guide.show { grid-template-columns: 1fr; } }
@@ -97,8 +101,8 @@
     <div class="cam-head"><b id="camTitle">Overhead camera</b><span class="hint" id="camNote"></span>
       <span class="spacer"></span><button class="btn ghost" id="guideBtn" type="button">Compare with Dream's camera</button></div>
     <div id="guide" class="guide">
-      <figure><img src="/static/yam-top.jpg" alt="Dream's station view"><figcaption>Dream's station (target): table fills the view, your arm enters at the bottom-right corner</figcaption></figure>
-      <figure><img src="/video.mjpg" alt="your overhead camera, live"><figcaption>Yours, live: move the camera until it looks like the left one</figcaption></figure>
+      <figure><div class="frame"><img src="/dream-view.jpg" alt="Dream's station view"><span class="ring"></span></div><figcaption>Dream's station (target): your arm's shoulder belongs on the ring, ahead of and inside the right YAM arm</figcaption></figure>
+      <figure><div class="frame"><img src="/video.mjpg" alt="your overhead camera, live"><span class="ring"></span></div><figcaption>Yours, live: move the camera (behind and left of the arm) until the shoulder sits on the ring</figcaption></figure>
     </div>
     <img id="video" src="/video.mjpg" alt="overhead camera">
   </div>

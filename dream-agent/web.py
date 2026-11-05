@@ -203,6 +203,16 @@ async def stop(app):
     await app["session"].client.disconnect()
 
 
+## Dream's own photo from its station's head camera (in the installed dreamlabs package, not in this repo).
+DREAM_VIEW = next(Path.home().glob("dream-env/lib/python3*/site-packages/robots/setup_reference/yam_head_1.jpg"), None)
+
+
+async def dream_view(request):
+    if DREAM_VIEW is None:
+        raise web.HTTPNotFound()
+    return web.FileResponse(DREAM_VIEW)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--robot", choices=("camera", "dry", "live", "mock"), default="camera")
@@ -230,6 +240,7 @@ def main():
     app.router.add_get("/ws", socket)
     app.router.add_get("/video.mjpg", video)
     app.router.add_get("/frame/{name}", frame)
+    app.router.add_get("/dream-view.jpg", dream_view)
     app.router.add_static("/static/", HERE / "static")
     app.on_startup.append(start)
     app.on_cleanup.append(stop)

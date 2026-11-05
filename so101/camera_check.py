@@ -5,8 +5,11 @@
 Top row: the YAM station (Dream's simulator, its top camera at the real station's calibrated pose: centered between
 the arms, 17 cm behind their bases, 94 cm above the table, 60 deg down; its left arm enters at the bottom left,
 its right arm at the bottom right). Bottom row: your top and wrist cameras,
-framed exactly as so101/dream_run.py frames them (320x176). Move the top camera until the two top views look alike:
-your arm coming in at the bottom corner of its side, the table ahead, the bottle and plate in the middle. Nothing is sent anywhere.
+framed exactly as so101/dream_run.py frames them (320x176). Move the top camera until the two top views look alike,
+the table ahead, the bottle and plate in the middle. so101_faas puts your arm 21.6 cm ahead of and 12.5 cm inside the
+YAM right arm's base, so its shoulder belongs inside the view, not at the bottom corner: about (457, 206) of 640x360 in
+Dream's real station photo (robots/setup_reference/yam_head_*.jpg, which frames the table tighter than this render);
+the dream-agent web page's camera guide rings that spot. Nothing is sent anywhere.
 """
 
 import argparse
