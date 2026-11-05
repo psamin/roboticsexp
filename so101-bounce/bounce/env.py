@@ -92,6 +92,8 @@ class EnvCfg:
     stamp_noise: tuple = (0.0, 0.0, 0.003)     # s, frame timestamp error
     rest_spread: float = 0.75                  # resting starts out to this fraction of the blade (full difficulty)
     flight_spread: float = 0.07                # m, dropped/tossed starts off centre (full difficulty)
+    drop_blade_p: float = 0.0                  # share of drops over anywhere on the blade (uniform over its area out
+    drop_blade_r: float = 1.0                  # to this fraction of the rim), whatever the task level
     mass_scale: tuple = (1.0, 0.9, 1.1)
     cam_bias: float = 0.008                     # m per axis at full difficulty
     joint_offset: float = 0.04                  # rad, calibration error at full difficulty
@@ -547,6 +549,10 @@ class BounceEnv:
         du0, dv0 = bl[:, 0] * rad * torch.cos(ang), bl[:, 1] * rad * torch.sin(ang)
         p_rest = o + B.RADIUS * R[..., 2] + du0[:, None] * R[..., 0] + dv0[:, None] * R[..., 1]
         lat = (0.01 + (c.flight_spread - 0.01) * dt_)[:, None] * (2 * self._u(n, 2) - 1)
+        if c.drop_blade_p > 0:
+            rb, ab = c.drop_blade_r * self._u(n).sqrt(), 2 * math.pi * self._u(n)
+            lat_b = torch.stack([bl[:, 0] * rb * torch.cos(ab), bl[:, 1] * rb * torch.sin(ab)], -1)
+            lat = torch.where((self._u(n) < c.drop_blade_p)[:, None], lat_b, lat)
         h0 = c.flight_h[0] + (c.flight_h[1] - c.flight_h[0]) * self._u(n)
         drop = self.forced is not None and self.forced.get("drop_height") is not None
         if drop:                                          # evaluation: released at rest from a fixed height and offset

@@ -501,16 +501,18 @@ v24_p32_dense:          # the same plus dense terms: each hit sends the ball at 
     <<: *v24env
     w_aim: 1.0
     w_track: 0.5
-v24_p32_reach:          # dense terms plus reach: the arm chases balls landing off the blade (pan +-0.4 rad is
-  train: *v24train      # ~+-14 cm at the paddle, was ~+-7), a wider paddle box and loss radius, a weaker pull home,
-  env:                  # more and farther beside-the-paddle drops. Resumed with the actor's outputs rescaled for
-    <<: *v24env         # the wider action range (scripts/rescale_actions.py).
-    action_scale: [0.40, 0.40, 0.40, 0.35, 0.30]
-    paddle_box: [0.20, 0.10]
-    max_lateral: 0.25
+v24_p32_reach:          # dense terms plus reach: the arm chases balls landing anywhere on or off the blade. Pan
+  train: *v24train      # +-0.5 rad is ~+-17 cm at the paddle (was +-0.2, ~7 cm); wider paddle box and loss radius,
+  env:                  # weaker pull home, more and farther beside drops at full range, 60 % of drops over the whole
+    <<: *v24env         # blade (the task level, stuck near 0.13, kept drops within ~3 cm of the centre). Resumed
+    action_scale: [0.50, 0.45, 0.45, 0.35, 0.30]       # with the actor rescaled (scripts/rescale_actions.py).
+    paddle_box: [0.22, 0.10]
+    max_lateral: 0.28
     w_home: 0.2
     beside_start_prob: 0.4
-    beside_offset: [0.08, 0.22]
+    beside_offset: [0.08, 0.25]
+    beside_full_p: 0.5
+    drop_blade_p: 0.6
     flight_spread: 0.14
     w_aim: 1.0
     w_track: 1.0
