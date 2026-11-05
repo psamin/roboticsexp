@@ -82,6 +82,7 @@
     </select>
     <span class="stat"><span id="conn" class="dot"></span></span>
     <span class="spacer"></span>
+    <button class="btn primary" id="stopBtn" style="display:none">Stop arm</button>
     <span class="stat">Dream calls left <b id="calls">–</b></span>
     <span class="stat" title="API-price estimate of the tokens; on your subscription it counts against the plan's usage limit and is not charged">Claude usage ≈<b id="cost">$0.00</b> <span class="hint">(plan, not billed)</span></span>
   </header>
@@ -177,10 +178,12 @@ function handle(ev) {
       lastStep.innerHTML = "<b>Step</b> · <span></span> <span class='hint'></span><div class='res'>running…</div>";
       lastStep.children[1].textContent = ev.text;
       lastStep.children[2].textContent = `(${ev.seconds} s)`;
+      if ($("mode").textContent !== "camera") $("stopBtn").style.display = "";
       break;
     }
     case "step_result":
       if (lastStep) lastStep.querySelector(".res").textContent = ev.text;
+      $("stopBtn").style.display = "none";
       $("calls").textContent = ev.calls_left;
       break;
     case "done": add("meta", `${ev.turns} turns · $${ev.cost.toFixed(3)}`); $("cost").textContent = "$" + ev.total_cost.toFixed(2); break;
@@ -199,6 +202,7 @@ function handle(ev) {
       break;
   }
 }
+$("stopBtn").onclick = () => send({ type: "stop" });
 $("runBtn").onclick = () => send({ type: "confirm", id: pendingId, ok: true });
 $("skipBtn").onclick = () => send({ type: "confirm", id: pendingId, ok: false });
 $("typeForm").onsubmit = e => {

@@ -10,6 +10,27 @@ import robot
 import voice
 
 
+class FakeProc:
+    returncode = 0
+
+    def communicate(self, _=None):
+        return None
+
+    def poll(self):
+        return 0
+
+
+@pytest.fixture(autouse=True)
+def never_launch_dream(monkeypatch):
+    """No test may start dream_run.py: process launches are faked and Dream points at /usr/bin/false. (A test that
+    only faked subprocess.run once started four real --live runs after LiveRobot moved to Popen.)"""
+    launched = []
+    monkeypatch.setattr(robot, "DREAM_PY", robot.Path("/usr/bin/false"))
+    monkeypatch.setattr(robot.subprocess, "Popen", lambda cmd, **kw: launched.append(cmd) or FakeProc())
+    monkeypatch.setattr(robot.subprocess, "run", lambda cmd, **kw: launched.append(cmd) or FakeProc())
+    return launched
+
+
 def test_silence_and_short_clips_are_never_sent():
     assert not voice.worth_sending(np.zeros(voice.RATE * 3, np.int16))                   # silence
     assert not voice.worth_sending((3000 * np.ones(int(0.2 * voice.RATE))).astype(np.int16))   # too short
@@ -79,24 +100,26 @@ def test_mock_robot_logs_steps_and_returns_a_photo():
     assert r.steps == ["Pick up the box and place it on the plate"]
 
 
-def test_live_robot_needs_a_typed_y(monkeypatch):
-    ran = []
-    monkeypatch.setattr(robot.subprocess, "run", lambda *a, **k: ran.append(a) or type("R", (), {"returncode": 0})())
+def test_live_robot_needs_a_typed_y(never_launch_dream, tmp_path, monkeypatch):
+    launched = never_launch_dream
+    monkeypatch.setattr(robot, "HERE", tmp_path)                     # step logs go to a temp dir
     assert robot.LiveRobot(confirm=lambda _: "").run_step("Pick up the box", 30).startswith("skipped")
     assert robot.LiveRobot(confirm=lambda _: "yes").run_step("Pick up the box", 30).startswith("skipped")
-    assert not ran
+    assert not launched
     out = robot.LiveRobot(confirm=lambda _: "y").run_step("Pick up the box", 30)
-    assert out.startswith("finished") and ran and "--live" in ran[0][0]
-    assert "Pick up the box with the left arm" in ran[0][0]                     # docs: name the arm Dream drives
+    assert out.startswith("finished") and len(launched) == 1 and "--live" in launched[0]
+    assert launched[0][0] == "/usr/bin/false"                          # never the real dream_run.py
+    assert "Pick up the box with the right arm" in launched[0] and "--side" in launched[0]   # one explicit side
 
 
-def test_call_budget_stops_steps_before_asking(monkeypatch):
+def test_call_budget_stops_steps_before_asking(never_launch_dream, tmp_path, monkeypatch):
     asked = []
-    monkeypatch.setattr(robot.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    monkeypatch.setattr(robot, "HERE", tmp_path)
     r = robot.LiveRobot("--side right", confirm=lambda q: asked.append(q) or "y", max_calls=40)
     assert r.run_step("Put the box on the plate", 30).startswith("finished") and r.budget.left == 9
     assert r.steps == ["Put the box on the plate with the right arm"]
     assert r.run_step("Put the cup on the plate", 30).startswith("not run") and len(asked) == 1
+    assert len(never_launch_dream) == 1
     m = robot.MockRobot(max_calls=31)
     if robot.MOCK_SCENE.exists():
         assert "done" in m.run_step("a", 30) and m.run_step("b", 30).startswith("not run")

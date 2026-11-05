@@ -12,6 +12,7 @@ estimated calls against a per-session cap.
 import base64
 import os
 import shlex
+import signal
 import subprocess
 import threading
 import time
@@ -122,8 +123,18 @@ class LiveRobot:
         """frames_url: dream_run.py reads both cameras from that server (web.py) instead of opening them."""
         self.dream_args, self.confirm, self.steps = shlex.split(dream_args), confirm, []
         self.budget, self.mode, self.hub, self.frames_url = Budget(max_calls), mode, hub, frames_url
+        self.proc = None                                      # the running dream_run.py, for stop()
         a = self.dream_args
-        self.side = a[a.index("--side") + 1] if "--side" in a else "left"      # dream_run.py's default arm
+        if "--side" not in a:                     # docs (On another arm): one arm plays the right arm; always explicit,
+            a += ["--side", "right"]              # so every step uses the same side and the same zero correction
+        self.side = a[a.index("--side") + 1]
+
+    def stop(self):
+        """One Ctrl-C to the running step: dream_run.py stops and glides the arm back."""
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.send_signal(signal.SIGINT)
+            return True
+        return False
 
     def look(self):
         if self.hub is not None:
@@ -163,8 +174,11 @@ class LiveRobot:
         log = HERE / "logs" / f"step-{time.strftime('%Y%m%d-%H%M%S')}-{self.mode}.log"
         log.parent.mkdir(exist_ok=True)
         try:
-            with open(log, "w") as f:                       # the user's yes above answers dream_run.py's LIVE prompt
-                r = subprocess.run(cmd, cwd=SO101, stdout=f, stderr=subprocess.STDOUT, input="\n", text=True)
+            with open(log, "w") as f:
+                self.proc = subprocess.Popen(cmd, cwd=SO101, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
+                                             text=True)
+                self.proc.communicate("\n")                    # the user's yes above answers dream_run.py's LIVE prompt
+                r, self.proc = self.proc, None
         finally:
             if self.hub is not None and not share:
                 self.hub.resume()

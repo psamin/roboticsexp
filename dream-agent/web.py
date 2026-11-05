@@ -31,6 +31,7 @@ from robot import FRONT_CAMERA, MOCK_SCENE, WRIST_CAMERA, CameraHub, LiveRobot, 
 HERE = Path(__file__).resolve().parent
 YES = re.compile(r"^\W*(yes|yeah|yep|go|go ahead|do it|run it|okay|ok|sure)\b", re.I)
 NO = re.compile(r"^\W*(no|nope|stop|skip|cancel|don't|do not)\b", re.I)
+STOP = re.compile(r"\b(stop|halt|freeze|abort)\b", re.I)
 
 
 class Session:
@@ -75,6 +76,13 @@ class Session:
                 return True
         return False
 
+    def stop_arm(self):
+        stop = getattr(self.robot, "stop", None)
+        if stop and stop():
+            asyncio.create_task(self.emit({"type": "note", "text": "stopping: the arm glides back"}))
+            return True
+        return False
+
     async def request(self, text):
         if self.busy:
             await self.emit({"type": "note", "text": f"still working, ignored: {text}"})
@@ -97,6 +105,9 @@ class Session:
             return
         text = await asyncio.to_thread(voice.transcribe_wav, wav_bytes)
         if not text:
+            return
+        if STOP.search(text) and self.stop_arm():
+            await self.emit({"type": "user", "text": text})
             return
         if self.pending and (YES.match(text) or NO.match(text)):
             await self.emit({"type": "user", "text": text})
@@ -166,6 +177,8 @@ async def socket(request):
             m = json.loads(msg.data)
             if m["type"] == "text" and m["text"].strip():
                 asyncio.create_task(s.request(m["text"].strip()))
+            elif m["type"] == "stop":
+                s.stop_arm()
             elif m["type"] == "confirm":
                 s.answer(bool(m["ok"]), m.get("id"))
             elif m["type"] == "mode" and isinstance(s.robot, LiveRobot) and m["mode"] in ("camera", "dry", "live"):
