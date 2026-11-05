@@ -1,5 +1,7 @@
 """Replay a rollout's recorded hand targets through dream's own local IK (as dream.client_ik does), with and without
-a region box, and count elbow-backwards solutions. Offline: no model calls, no arm."""
+a region box, and count elbow-backwards solutions. Offline: no model calls, no arm.
+Rollouts before the wrist-roll shift (my_robot.ROLL_SHIFT_DEG; Nov 5 00:45-00:58) were recorded with the roll in
+the old units: reproduce their numbers at commit 915c00c."""
 import ast
 import glob
 import sys
@@ -12,7 +14,7 @@ from dream_ik.specs import EMBODIMENTS, SERVE, Region, ServeSpec
 run = sys.argv[1]
 ARM = "so101_faas"
 spec = EMBODIMENTS[ARM]
-REST = {"right": np.array([0.14, -1.71, 1.437, 0.765, 0.621, 0.0]),
+REST = {"right": np.array([0.14, -1.71, 1.437, 0.765, -1.5708, 0.0]),
         "left": np.array([0.3409, -1.7104, 1.5285, 1.1724, -1.4119, 0.0])}
 EXEC = 20                                     # rows played before the next reply takes over (log: ~20 executed)
 
@@ -25,8 +27,8 @@ def build(region):
     return ChunkIK(ARM, SERVE.tool, 30.0, obstacles)
 
 
-GUARD_LO = np.radians([-99, -98, -26, -81, -29, 0.0])
-GUARD_HI = np.radians([50, 60, 82, 92, 66, 0.0])
+GUARD_LO = np.radians([-99, -98, -26, -81, -155, 0.0])
+GUARD_HI = np.radians([50, 60, 82, 92, -59, 0.0])
 
 
 def replay(ik, solve="traj", guard=False):

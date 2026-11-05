@@ -25,7 +25,7 @@ custom:
 # in front of the base folded the arm into itself.)
 follower_r:
   can_channel: /dev/tty.usbmodem5B790811541
-  home: [0.14, -1.71, 1.437, 0.765, 0.621, 0.0]   # the dry run's reading at rest, 2026-11-05 00:43
+  home: [0.14, -1.71, 1.437, 0.765, -1.5708, 0.0]   # rest as read 2026-11-05 00:43, roll less ROLL_SHIFT_DEG
   region: {lo: [null, -0.12, 0.02], hi: [0.546, 0.345, 0.25]}
 # No left arm: my_robot.py keeps it in memory at so101_faas's left rest pose (dream_ik.specs), gripper open.
 follower_l:
@@ -33,12 +33,13 @@ follower_l:
   home: [0.3409, -1.7104, 1.5285, 1.1724, -1.4119, 0.0]
 
 # The zero-shot embodiment's roles: head = the overhead C920 (OpenCV 0, 16:9 as the model takes it), wrist_r = the
-# arm's wrist camera (OpenCV 1, turned upright, fingers at the bottom), wrist_l = black (the parked arm's).
+# arm's wrist camera (my_robot.WristCam: OpenCV 1 turned upright, fingers at the bottom, cropped to 16:9 rather than
+# squashed), wrist_l = black (the parked arm's).
+# The custom sources also load my_robot.py before dreamcli makes its client, so dream's IK gets this arm's usable joint
+# ranges (my_robot.narrow_ik_limits).
 cameras:
   - {name: head, device: 0, width: 1280, height: 720, fps: 30}
-  - {name: wrist_r, device: 1, width: 640, height: 480, fps: 30, rotate: 90}
-  # Also what loads my_robot.py before dreamcli makes its client, so dream's IK gets this arm's usable joint ranges
-  # (my_robot.narrow_ik_limits): keep this camera first among the custom sources.
+  - {name: wrist_r, source: my_robot.py:WristCam, width: 480, height: 270, fps: 30}
   - {name: wrist_l, source: my_robot.py:Black, width: 640, height: 480, fps: 30}
 
 # Docs ("On another arm"): name only the right arm in the prompt.

@@ -53,17 +53,24 @@ JOINT_MARGIN_DEG = 8.0
 ## lagged, and the model, which anchors each chunk on where the hand is, drifted further each chunk.
 MAX_JOINT_SPEED_DEG_S = 90.0
 ## The joint ranges this arm's own demonstrations used (flyingturtleboop/so101_medicine_bottle_pickplace, 7824
-## frames, p0.5-p99.5, model units, degrees), widened by DEMO_MARGIN_DEG. dream's IK reached far or awkward hand
-## targets by flipping to an elbow-backwards pose the demos never use (elbow down to -108 deg in 32 of 93 replies on
-## 2026-11-05 00:45; the demos' elbow stays above -16): targets outside these ranges are held at their edge.
-DEMO_RANGE_DEG = ((-105, 40), (-97, 50), (-16, 88), (-71, 86), (-19, 56))
+## frames, observation.state p0.5-p99.5, LeRobot units, degrees), widened by DEMO_MARGIN_DEG. dream's IK reached far
+## or awkward hand targets by flipping to an elbow-backwards pose the demos never use (elbow down to -108 deg in 32 of
+## 93 replies on 2026-11-05 00:45; the demos' elbow stays above -16 in model units): targets outside these ranges are
+## held at their edge.
+DEMO_RANGE_DEG = ((-105.5, 39.7), (-103.4, 43.4), (-7.2, 96.6), (-70.7, 86.5), (-19.1, 56.5))
 DEMO_MARGIN_DEG = 10.0
+## The wrist roll's zero against so101_faas's. dream's rule leaves the roll alone (no stops), but this arm's roll zero
+## is not the model's: at rest it reads +35.6 deg (dry run, 2026-11-05 00:43) with the hand upright (overhead video,
+## 00:58 frame 0: wrist camera on top, moving jaw open flat to the right), and so101_faas's upright hand is -90 (dream's
+## SO-101 home, "wrist camera facing up"; FK there puts the tool's y axis up, as the docs' frames say). With 0 here the
+## model was told the hand was rolled 126 deg, camera pointing left and down.
+ROLL_SHIFT_DEG = 125.6
 
 
 def reference_shift_rad(calibration: dict[str, feetech.Calibration], side: str) -> np.ndarray:
     """Per joint, how far this arm's calibrated middle sits from the reference arm's (that side's), radians, by
     dream's rule (`so101_calibration.ArmCalibration`): the middle of the recorded range against the reference's;
-    0 for the wrist roll, and for a joint whose range is longer than the reference's (not the same stops).
+    0 for a joint whose range is longer than the reference's (not the same stops); ROLL_SHIFT_DEG for the wrist roll.
     Model units = arm units - shift."""
     deg_per_tick = 360.0 / (feetech.TICKS_PER_TURN - 1)
     shift = np.zeros(DOF)
@@ -76,6 +83,7 @@ def reference_shift_rad(calibration: dict[str, feetech.Calibration], side: str) 
         if abs(off) > so101_calibration.MAX_SHIFT_DEG:
             raise RuntimeError(f"{name}'s calibrated middle is {off:.0f} deg from the reference arm's: recalibrate")
         shift[NAMES.index(name)] = np.radians(off)
+    shift[NAMES.index("wrist_roll")] = np.radians(ROLL_SHIFT_DEG)
     return shift
 
 
@@ -108,7 +116,7 @@ def real_limits_rad(calibration: dict[str, feetech.Calibration], shift: np.ndarr
     hi = np.array([np.radians(feetech.ticks_to_deg(calibration[n].range_max)) for n in NAMES] + [0.0]) - shift
     lo[:-1] += m
     hi[:-1] -= m
-    demo = np.radians(np.array(DEMO_RANGE_DEG, dtype=float) + [-DEMO_MARGIN_DEG, DEMO_MARGIN_DEG])
+    demo = np.radians(np.array(DEMO_RANGE_DEG, dtype=float) + [-DEMO_MARGIN_DEG, DEMO_MARGIN_DEG]) - shift[:5, None]
     lo[:5], hi[:5] = np.maximum(lo[:5], demo[:, 0]), np.minimum(hi[:5], demo[:, 1])
     if len(home):
         lo, hi = np.minimum(lo, np.asarray(home, dtype=float)), np.maximum(hi, np.asarray(home, dtype=float))
@@ -253,6 +261,39 @@ class Black:
 
     def release(self) -> None:
         pass
+
+
+## The wrist camera's OpenCV index (a `source:` entry carries no device) and its capture size.
+WRIST_CAMERA = 1
+WRIST_CAPTURE = (640, 480)
+## The 16:9 band of the upright 480x640 wrist frame the model gets, rows top..bottom: the fixed finger's tip in the
+## bottom fifth, where dream's reference wrist view has the fingertips (robots/setup_reference/yam_wrist_right.jpg).
+WRIST_ROWS = (170, 440)
+
+
+class WristCam:
+    """The arm's wrist camera as a 16:9 wrist view: turned upright (fingers at the bottom) and cropped. dream resizes
+    every frame to 640x360 and never crops, so the 3:4 upright frame reached the model 2.37x wider (dryrun-1.log)."""
+
+    def __init__(self, cfg=None) -> None:
+        import cv2
+        self._cv2 = cv2
+        self._cap = cv2.VideoCapture(WRIST_CAMERA)
+        if not self._cap.isOpened():
+            raise RuntimeError(f"wrist camera (OpenCV {WRIST_CAMERA}) did not open")
+        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*"MJPG"))
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, WRIST_CAPTURE[0])
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, WRIST_CAPTURE[1])
+        self._cap.set(cv2.CAP_PROP_FPS, getattr(cfg, "fps", 30))
+
+    def read(self):
+        ok, frame = self._cap.read()
+        if not ok:
+            return False, None
+        return True, self._cv2.rotate(frame, self._cv2.ROTATE_90_CLOCKWISE)[WRIST_ROWS[0]:WRIST_ROWS[1]]
+
+    def release(self) -> None:
+        self._cap.release()
 
 
 # dreamcli opens the cameras, then makes the dream client (which builds the IK), then opens the arms: the wrist_l camera
