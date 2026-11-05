@@ -45,15 +45,18 @@ cameras:
 # Docs ("On another arm"): name only the right arm in the prompt.
 task: "pick up the green bottle and put it on the plate with the right arm"
 
-# The SO-101's rate (dream's beta robot table: 30 Hz). 48 rows per reply, 9 frames at 5 fps.
-control_hz: 30
+# dream's station rate for an SO-101 (robots.config SO101_CONTROL_HZ): the base model's 30 Hz rows at two thirds speed,
+# "at 30 Hz the zero-shot base model swings the arm near home; at 20 Hz it runs smooth" (METAL_CONTROL_HZ). The beta
+# robot table's 30 is the rate fine-tunes train at. 48 rows per reply, 9 frames at 5 fps.
+control_hz: 20
 action_horizon: 48
 stale_after_s: 0.2
 max_stall_ticks: 240
 obs_window: 9
 obs_fps: 5.0
-# Above the 90th percentile of the hand speed the model planned on 2026-11-05 (0.41 m/s; dream's station default is
-# 0.6): at 0.2 the arm lagged the plan on ~60 % of rows, and the model anchors each chunk on where the hand is.
+# Above the 90th percentile of the hand speed the model planned on 2026-11-05 (0.41 m/s at 30 Hz, 0.27 at 20; dream's
+# station default is 0.6): at 0.2 the arm lagged the plan on ~60 % of rows, and the model anchors each chunk on where
+# the hand is.
 max_ee_speed_m_s: 0.45
 grip_force_cap: 0
 

@@ -15,7 +15,8 @@ How one SO-101 maps onto the base model (the docs' "On another arm"):
 - Cameras: front (C920, top) is the scene camera, wrist is the right wrist.
 - Joints go to the model in radians from the calibrated middle pose, as dream's SO-101 driver reads them, moved by how
   far this arm's middle pose sits from the reference arm's (what `dreamcli setup` would write into the servos; here
-  in software only, so LeRobot's calibration and datasets are untouched).
+  in software only, so LeRobot's calibration and datasets are untouched), and the wrist roll by my_robot.ROLL_SHIFT_DEG
+  (this arm's upright hand reads +35.6 deg; so101_faas's is -90).
 
 Live safety, on top of the docs' rules:
 - Dream's own SO-101 driver runs the servos (robots.motor_arm over robots.feetech): LeRobot's gains, soft limits at the
@@ -47,8 +48,13 @@ from loguru import logger as jax_logger
 
 import dream
 from dream_ik import specs
-from robots import adapter, config, feetech, kinematics, motor_arm, so101, so101_calibration
+from robots import adapter, config, feetech, kinematics, motor_arm, so101
 from robots import types as robot_types
+
+## The station's driver module (dream-agent/station/my_robot.py): its zero rule, and on import dream's IK narrowed to
+## this arm's usable joint ranges, so this loop and `dreamcli robot run` drive the arm the same way.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "dream-agent" / "station"))
+import my_robot  # noqa: E402
 
 PORT = "/dev/tty.usbmodem5B790811541"  # FOLLOWER_PORT in env.sh
 CALIBRATION = pathlib.Path.home() / ".cache/huggingface/lerobot/calibration/robots/so_follower/my_follower.json"
@@ -262,21 +268,10 @@ def model_frame(image: np.ndarray) -> tuple[str, np.ndarray]:
 
 
 def zero_offsets_deg(calibration: dict[str, feetech.Calibration], side: str = "right") -> dict[str, float]:
-    """How far each joint's calibrated middle sits from the reference arm's (that side's), by dream's own rule
-    (so101_calibration.ArmCalibration.finish): 0 for the wrist roll, the gripper, and a joint whose range is longer
-    than the reference's (not the same stops)."""
-    reference = so101_calibration.reference(side)
-    offsets = {name: 0.0 for name in NAMES}
-    for name, ref in reference.items():
-        entry = calibration[name]
-        span = (entry.range_max - entry.range_min) * DEG_PER_TICK
-        off = ((entry.range_min + entry.range_max) / 2 - ref.middle) * DEG_PER_TICK
-        if span > ref.span_deg + so101_calibration.LONG_RANGE_DEG:
-            continue
-        if abs(off) > so101_calibration.MAX_SHIFT_DEG:
-            raise SystemExit(f"{name}'s calibrated middle is {off:.0f} deg from the reference arm's: recalibrate")
-        offsets[name] = off
-    return offsets
+    """How far each joint's zero sits from so101_faas's (my_robot.reference_shift_rad: dream's own rule for the joints
+    with stops, my_robot.ROLL_SHIFT_DEG for the wrist roll); 0 for the gripper."""
+    shift = np.degrees(my_robot.reference_shift_rad(calibration, side))
+    return {name: float(shift[i]) if name != "gripper" else 0.0 for i, name in enumerate(NAMES)}
 
 
 class ZeroShot:
@@ -287,7 +282,9 @@ class ZeroShot:
     """
 
     task = "Put both objects in the bowl with the {side} arm"
-    row_hz = 30  # the rate the base model learned (dreamcli plays it at 20, slower)
+    # dream's station rate on every body (robots.config SO101_CONTROL_HZ): the base model's 30 Hz rows at two thirds
+    # speed; at 30 "the zero-shot base model swings the arm near home; at 20 Hz it runs smooth" (METAL_CONTROL_HZ).
+    row_hz = 20
     max_speed_deg_s = 35.0
     front_size = (1280, 720)  # the C920's own 16:9 mode: a wider view than a 4:3 frame cropped
     wrist_rotate = cv2.ROTATE_90_CLOCKWISE  # upright, fingers at the bottom, as env.sh records it
