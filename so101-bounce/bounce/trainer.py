@@ -8,7 +8,7 @@ import time
 import torch
 
 from .env import FAIL_REASONS
-from .evaluation import evaluate, score
+from .evaluation import SUITES, evaluate, score
 from .ppo import PPO
 from .rollout_buffer import RolloutBuffer
 
@@ -48,7 +48,9 @@ class Trainer:
 
     def run_eval(self, tag):
         t0 = time.time()
-        res = evaluate(self.env, self.agent.act_deterministic, self.eval_seed)
+        names = self.config.get("train", {}).get("eval_suites")              # optional subset of SUITES
+        res = evaluate(self.env, self.agent.act_deterministic, self.eval_seed,
+                       {k: SUITES[k] for k in names} if names else SUITES)
         s = score(res)
         row = {"iteration": self.it, "steps": self.steps, "wall_min": self.wall() / 60, "score": s,
                "level": self.env.level, **{f"{k}_{m}": v for k, r in res.items() for m, v in r.items()}}

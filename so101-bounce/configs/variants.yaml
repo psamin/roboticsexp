@@ -480,3 +480,24 @@ v23_p32_learn_w:        # the same on the wide servo set (r10 cap up to the spee
 v23_p32_learn16:        # the same as v23_p32_learn, from v16-p32-lo
   env:
     <<: *v23env
+# Round 16 (2026-11-04): the first real-arm test of v23-p32-learn16 bounced from dropped balls (up to 7 flights at
+# ~10 cm, period ~0.3 s); its launches from rest did not, and the ball worked out to the blade edge. Drops only (the
+# user drops from 17-30 cm), targets 14-20 cm so a drop needs little damping (and 1.25x the flight time at 16 cm), drops
+# landing up to 10 cm off centre, and the real camera's top edge measured from those drops (22-30 cm above the blade,
+# not 10-14). Scored on drop suites only. Resumed from v23-p32-learn16 with its best score reset.
+v24_p32_drop16:
+  train: &v24train
+    eval_suites: [nominal, moderate, user_hw, full]
+  env: &v24env
+    <<: *v23env
+    target_apex: [0.14, 0.20]
+    rest_start_prob: 0.0
+    flight_h: [0.12, 0.30]
+    flight_spread: 0.10
+    view_top: [0.20, 0.28]
+v24_p32_dense:          # the same plus dense terms: each hit sends the ball at the velocity that reaches the target
+  train: *v24train      # apex and lands back on the centre (w_aim), and the paddle stays under the ball's predicted
+  env:                  # landing point in flight (w_track)
+    <<: *v24env
+    w_aim: 1.0
+    w_track: 0.5

@@ -161,6 +161,9 @@ class EnvCfg:
     w_first: float = 0.0                        # bonus for the first bounce within 3 cm of the target height
     w_wait: float = 0.0                         # per second until that first on-target bounce (launch quickly)
     w_back: float = 0.0                         # per m of first-apex drift toward -x (the paddle handle and the base)
+    w_aim: float = 0.0                          # per hit: ball leaves at the velocity that reaches the target apex
+    aim_sigma: float = 0.2                      # (vz = sqrt(2 g h)) and lands back on the centre; m/s
+    w_track: float = 0.0                        # per s in flight: paddle centre under the ball's predicted landing point
     handle_keepout: float = 0.0                 # m: a ball off the paddle this far behind its centre (-x) within 4 cm
                                                 # of paddle height is lost (it comes down on the handle); 0 = off
     # round 9
@@ -823,7 +826,7 @@ class BounceEnv:
         self.goal_prev = goal
         delay = (self.delay_sub + (self._u(self.N) * (self.ctrl_jit + 1).float()).floor().long()).clamp(0, CMD_RING - 2)
         ev = {k: torch.zeros(self.N, device=self.device) for k in ("apex", "hit", "n_hit", "n_apex", "first", "tilt_hit",
-                                                                    "back")}
+                                                                    "back", "aim")}
         load_pen = torch.zeros(self.N, device=self.device)
         ar = torch.arange(self.N, device=self.device)
         fk = self.kin.forward(self.q)
@@ -898,6 +901,11 @@ class BounceEnv:
             self.launch_z = torch.where(touch, self.p_ball[:, 2] - B.RADIUS, self.launch_z)
             ev["hit"] += real_hit * torch.exp(-(du ** 2 + dv_ ** 2) / 0.03 ** 2)
             ev["n_hit"] += real_hit.float()
+            if c.w_aim:
+                vz_des = (2 * 9.81 * self.target_apex).sqrt()
+                v_xy_des = (-(self.p_ball[:, :2] - self.home_env[:, :2]) * 9.81 / (2 * vz_des)[:, None]).clamp(-0.5, 0.5)
+                err2 = (self.v_ball[:, :2] - v_xy_des).pow(2).sum(-1) + (self.v_ball[:, 2] - vz_des).pow(2)
+                ev["aim"] += real_hit * torch.exp(-err2 / c.aim_sigma ** 2)
             if c.w_tilt_contact:
                 tc = torch.rad2deg(torch.acos(Reff[:, 2, 2].clamp(-1, 1)))
                 ev["tilt_hit"] += real_hit * ((tc - c.tilt_contact_deg) / c.tilt_contact_deg).clamp(min=0)
@@ -947,6 +955,15 @@ class BounceEnv:
             r["launch"] = c.w_first * ev["first"] - c.w_wait * self.dt * (~self.on_target).float()
         if c.w_back:                                 # launch forward or straight up, not toward the handle
             r["back"] = -c.w_back * ev["back"]
+        if c.w_aim:
+            r["aim"] = c.w_aim * ev["aim"]
+        if c.w_track:                                # ballistic landing point at the paddle's height
+            vz = self.v_ball[:, 2]
+            dz = (self.p_ball[:, 2] - B.RADIUS - fk["paddle_o"][:, 2]).clamp(min=0)
+            t_l = (vz + (vz ** 2 + 2 * 9.81 * dz).sqrt()) / 9.81
+            land = self.p_ball[:, :2] + self.v_ball[:, :2] * t_l[:, None]
+            d = (fk["paddle_o"][:, :2] - land).norm(dim=-1)
+            r["track"] = -c.w_track * self.dt * (self.rest_time <= 0) * (d / 0.05).pow(2).clamp(max=4.0)
         # termination
         rel = self.p_ball - self.home_env
         po = fk["paddle_o"] - self.home_env
