@@ -504,6 +504,8 @@ v24_p32_dense:          # the same plus dense terms: each hit sends the ball at 
 v24_p32_reach:          # dense terms plus reach: the arm chases balls landing anywhere on or off the blade. Pan
   train: &v24reachtrain # +-0.5 rad is ~+-17 cm at the paddle (was +-0.2, ~7 cm); wider paddle box and loss radius,
     eval_suites: [nominal, moderate, user_hw, full]
+  ppo: &v24reachppo     # exploration: resumed at std 0.1 with an entropy bonus (since round 10 the std sat at the
+    ent_coef: 0.002     # e^-5 clamp floor, 0.0067, so fine-tunes explored almost nothing)
   env: &v24reach        # weaker pull home, more and farther beside drops at full range, 60 % of drops over the whole
     <<: *v24env         # blade (the task level, stuck near 0.13, kept drops within ~3 cm of the centre); off-centre
     action_scale: [0.50, 0.45, 0.45, 0.35, 0.30]     # hits cost up to 1.0 at the rim (w_edge; a bigger w_hit would
@@ -528,6 +530,7 @@ v24_p32_reach:          # dense terms plus reach: the arm chases balls landing a
     cam_view_back: 0.14
 v24_p32_reach_sparse:   # ablation: the same without the dense aim / track terms
   train: *v24reachtrain
+  ppo: *v24reachppo
   env:
     <<: *v24reach
     w_aim: 0.0
