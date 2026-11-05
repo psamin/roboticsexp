@@ -230,6 +230,7 @@ def main():
     app.router.add_get("/ws", socket)
     app.router.add_get("/video.mjpg", video)
     app.router.add_get("/frame/{name}", frame)
+    app.router.add_static("/static/", HERE / "static")
     app.on_startup.append(start)
     app.on_cleanup.append(stop)
     print(f"dream-agent ({args.robot} robot): open http://127.0.0.1:{args.port}")

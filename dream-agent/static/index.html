@@ -34,6 +34,12 @@
   .mic { display: flex; align-items: center; gap: 16px; }
   .cam { padding: 10px; }
   .cam-head { display: flex; gap: 8px; align-items: baseline; margin: 0 4px 8px; }
+  .guide { display: none; gap: 8px; margin-bottom: 8px; }
+  .guide.show { display: grid; grid-template-columns: 1fr 1fr; }
+  .guide figure { margin: 0; }
+  .guide img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; display: block; }
+  .guide figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  @media (max-width: 560px) { .guide.show { grid-template-columns: 1fr; } }
   #video { width: 100%; border-radius: 8px; display: block; background: var(--robot); aspect-ratio: 16 / 9; object-fit: cover; }
   #micBtn { width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer; flex: none;
             background: var(--robot); color: var(--ink); font-size: 30px; transition: transform .1s; }
@@ -88,7 +94,12 @@
   </header>
 
   <div class="panel cam">
-    <div class="cam-head"><b id="camTitle">Overhead camera</b><span class="hint" id="camNote"></span></div>
+    <div class="cam-head"><b id="camTitle">Overhead camera</b><span class="hint" id="camNote"></span>
+      <span class="spacer"></span><button class="btn ghost" id="guideBtn" type="button">Compare with Dream's camera</button></div>
+    <div id="guide" class="guide">
+      <figure><img src="/static/yam-top.jpg" alt="Dream's station view"><figcaption>Dream's station (target): table fills the view, your arm enters at the bottom-right corner</figcaption></figure>
+      <figure><img src="/video.mjpg" alt="your overhead camera, live"><figcaption>Yours, live: move the camera until it looks like the left one</figcaption></figure>
+    </div>
     <img id="video" src="/video.mjpg" alt="overhead camera">
   </div>
 
@@ -202,6 +213,11 @@ function handle(ev) {
       break;
   }
 }
+$("guideBtn").onclick = () => {
+  const on = $("guide").classList.toggle("show");
+  $("video").style.display = on ? "none" : "";
+  $("guideBtn").textContent = on ? "Back to the camera" : "Compare with Dream's camera";
+};
 $("stopBtn").onclick = () => send({ type: "stop" });
 $("runBtn").onclick = () => send({ type: "confirm", id: pendingId, ok: true });
 $("skipBtn").onclick = () => send({ type: "confirm", id: pendingId, ok: false });
