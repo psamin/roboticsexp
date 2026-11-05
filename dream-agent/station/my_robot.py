@@ -36,6 +36,11 @@ CALIBRATION = pathlib.Path(os.environ.get(
 PARKED = "parked"
 ## The side the real arm plays (the config's follower_r).
 REAL_SIDE = "right"
+## The servos' P register. dream's SO-101 table sets LeRobot's 16 ("its default P of 32 shakes"); at 16 this arm ran
+## 167-200 ms behind dream's commands on 2026-11-05 (00:45 run, best-fit lag per joint), and the model, which anchors
+## each chunk on where the hand is, kept planning from a hand that had not arrived. This arm runs P 32 for hours in
+## so101-bounce (78-122 ms goal-to-joint lag measured there), without shaking. D stays dream's 32.
+SERVO_P = 32
 ## The servos but the gripper, base to wrist.
 NAMES = [j.name for j in so101.JOINTS][:-1]
 ## so101_faas has a sixth, held joint (joint6) after the arm's five; it always reads 0.
@@ -155,7 +160,19 @@ def _dream_so101(cfg: config.ArmConfig, side: str, energize: bool) -> followers.
     open_deg, closed_deg = so101.gripper_ends(str(CALIBRATION))
     arm_cfg = config.ArmConfig(can_channel=cfg.can_channel, gripper_open_deg=open_deg, gripper_closed_deg=closed_deg,
                                calibration=str(CALIBRATION), home=(0.0,) * DOF)
-    return motor_arm.open_arm(so101.ARM, arm_cfg, side, opener=feetech.open_bus, energize=energize)._driver
+    return motor_arm.open_arm(_SO101_SPEC, arm_cfg, side, opener=feetech.open_bus, energize=energize)._driver
+
+
+## dream's SO-101 table with SERVO_P on the arm's five joints (the gripper keeps dream's 16): its own servo chain, which
+## writes the P register when it configures the servos.
+_JOINTS = tuple(dataclasses.replace(j, kp=float(SERVO_P)) if j.name != "gripper" else j for j in so101.JOINTS)
+
+
+def _chain(side, cfg, *, opener, clock, sleep):
+    return feetech.FeetechChain(side, cfg.can_channel, _JOINTS, cfg.calibration, opener=opener, clock=clock, sleep=sleep)
+
+
+_SO101_SPEC = dataclasses.replace(so101.ARM, chain=_chain)
 
 
 class _Shifted(followers.Driver):
