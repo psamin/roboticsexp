@@ -30,7 +30,9 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT.parent / "so101"))
 import arm as A                                                    # noqa: E402
+import robot_limits                                                # noqa: E402  (the repo's shared SO-101 safe range)
 from rig import BALL_RADIUS, CAMERA_CALIB as rig_calib, CONFIG, BallFinder, Camera, CameraModel, calib_inputs, camera_index, camera_view_check, fresh_frames, lock_camera, deg_to_sim, shift_paddle, sim_to_deg   # noqa: E402
 from bounce import ball as B                                       # noqa: E402
 from bounce.env import EnvCfg                                      # noqa: E402
@@ -169,6 +171,9 @@ def main():
     launch_q, t_launched, relaunches = [], None, 0
     kin = shift_paddle(ArmKinematics(build_model(), 1))
     lower, upper = kin.lower.numpy() + 0.02, kin.upper.numpy() - 0.02
+    env = robot_limits.lerobot_deg(A.CALIBRATION)                  # so101/robot_limits.yaml: no folding, 8 deg from the ends
+    q_a, q_b = deg_to_sim({n: env[n][0] for n in A.ARM}), deg_to_sim({n: env[n][1] for n in A.ARM})
+    lower, upper = np.maximum(lower, np.minimum(q_a, q_b)), np.minimum(upper, np.maximum(q_a, q_b))
     hold = json.loads(A.HOLD.read_text())
     print(f"policy {a.checkpoint}: {hz:.0f} Hz, P gain {p_gain}, history {cfg.history}, detections {cfg.cam_k}")
     cam = finder = model = vb = writer = None

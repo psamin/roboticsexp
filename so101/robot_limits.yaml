@@ -1,0 +1,13 @@
+# The SO-101 follower's safe joint range, shared by every experiment in this repo (dream-agent/station,
+# so101-bounce, so101 tools). Experiments may only narrow it. Angles are LeRobot degrees (0 at the middle of each
+# joint's recorded range, as LeRobot reads them); robot_limits.py turns them into servo ticks through the
+# calibration file, so each stack converts with its own zero.
+calibration: ~/.cache/huggingface/lerobot/calibration/robots/so_follower/my_follower.json
+margin_deg: 8                  # kept from each recorded mechanical end
+joints:                        # [lo, hi] LeRobot degrees; null keeps the recorded end less the margin
+  shoulder_pan: [null, null]
+  shoulder_lift: [null, null]
+  elbow_flex: [-14, null]      # no elbow-backwards fold: with the full range Dream's IK flipped the elbow on 35 of 92
+                               # chunks of the 2026-11-05 00:45 run, at this bound on none (-26 deg in so101_faas)
+  wrist_flex: [null, null]
+  wrist_roll: [null, null]

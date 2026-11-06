@@ -21,6 +21,7 @@ import dataclasses
 import logging
 import os
 import pathlib
+import sys
 import time
 
 import numpy as np
@@ -28,6 +29,9 @@ import numpy.typing as npt
 
 from robots import config, feetech, followers, motor_arm, so101, so101_calibration
 from robots import home as dream_home
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "so101"))
+import robot_limits  # noqa: E402  (the repo's shared SO-101 safe range, so101/robot_limits.yaml)
 
 ## The arm's LeRobot calibration file (`lerobot-calibrate`, arm id my_follower); SO101_CALIBRATION overrides it.
 CALIBRATION = pathlib.Path(os.environ.get(
@@ -46,9 +50,6 @@ SERVO_P = 32
 NAMES = [j.name for j in so101.JOINTS][:-1]
 ## so101_faas has a sixth, held joint (joint6) after the arm's five; it always reads 0.
 DOF = 6
-## Targets stay this far inside each joint's real calibrated range: so101_faas's URDF lets the shoulder pan and the
-## wrist flex 5-6 deg past this arm's stops, and dream's solve trusts the URDF (docs, "On another arm": Safety).
-JOINT_MARGIN_DEG = 8.0
 ## Fastest a joint target may move, whatever the model asks: above the 90th percentile of what dream's IK asked on
 ## 2026-11-05 (75 deg/s), so the arm keeps up with the plan; a cap below it (60) held 11-17 % of rows back, the arm
 ## lagged, and the model, which anchors each chunk on where the hand is, drifted further each chunk.
@@ -110,13 +111,14 @@ class _Parked(followers.Driver):
 
 def real_limits_rad(calibration: dict[str, feetech.Calibration], shift: np.ndarray,
                     home: tuple[float, ...] = ()) -> tuple[np.ndarray, np.ndarray]:
-    """Where each joint's target may go, model units: the real calibrated range less JOINT_MARGIN_DEG, narrowed to the
-    demonstrations' range (DEMO_RANGE_DEG +- DEMO_MARGIN_DEG), widened to take in the home pose; joint6 pinned at 0."""
-    m = np.radians(JOINT_MARGIN_DEG)
-    lo = np.array([np.radians(feetech.ticks_to_deg(calibration[n].range_min)) for n in NAMES] + [0.0]) - shift
-    hi = np.array([np.radians(feetech.ticks_to_deg(calibration[n].range_max)) for n in NAMES] + [0.0]) - shift
-    lo[:-1] += m
-    hi[:-1] -= m
+    """Where each joint's target may go, model units: the repo's shared SO-101 safe range (so101/robot_limits.yaml:
+    the recorded range less 8 deg, no elbow-backwards fold; so101_faas's URDF lets the pan and wrist flex past this
+    arm's stops and its elbow fold, and dream's solve trusts the URDF), narrowed to the demonstrations' range
+    (DEMO_RANGE_DEG +- DEMO_MARGIN_DEG), widened to take in the home pose; joint6 pinned at 0."""
+    env = robot_limits.ticks({n: {"range_min": calibration[n].range_min, "range_max": calibration[n].range_max}
+                              for n in NAMES})
+    lo = np.array([np.radians(feetech.ticks_to_deg(env[n][0])) for n in NAMES] + [0.0]) - shift
+    hi = np.array([np.radians(feetech.ticks_to_deg(env[n][1])) for n in NAMES] + [0.0]) - shift
     demo = np.radians(np.array(DEMO_RANGE_DEG, dtype=float) + [-DEMO_MARGIN_DEG, DEMO_MARGIN_DEG]) - shift[:5, None]
     lo[:5], hi[:5] = np.maximum(lo[:5], demo[:, 0]), np.minimum(hi[:5], demo[:, 1])
     if len(home):
