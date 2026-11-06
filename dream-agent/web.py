@@ -3,7 +3,8 @@ sees and does, speaks its answers, and has Run / Skip buttons for real arm steps
 
   uv run python web.py                  # live overhead camera, plan only (free); open http://127.0.0.1:8000
   uv run python web.py --robot dry      # + Dream-1 inference per step, the arm does not move (billed)
-  uv run python web.py --robot live     # + Dream-1 moves the arm (billed; each step needs Run or a spoken "yes")
+  uv run python web.py --robot live     # + Dream-1 moves the arm (billed; steps run right away; Stop or "stop" ends one)
+  uv run python web.py --robot live --ask   # each dry / live step waits for Run or a spoken "yes"
   uv run python web.py --robot mock     # a saved photo instead of the camera
 
 The page detects speech itself and sends only finished utterances (WAV) here; this server sends them to Deepgram
@@ -176,7 +177,7 @@ async def socket(request):
             elif m["type"] == "confirm":
                 s.answer(bool(m["ok"]), m.get("id"))
             elif m["type"] == "mode" and isinstance(s.robot, LiveRobot) and m["mode"] in ("camera", "dry", "live"):
-                s.robot.mode = m["mode"]                # each dry / live step still needs Run or a spoken yes
+                s.robot.mode = m["mode"]
                 await s.emit({"type": "note", "text": f"mode: {m['mode']}"})
                 await s.status()
             elif m["type"] == "wake":
@@ -216,11 +217,13 @@ def main():
     ap.add_argument("--dream-args", default="", help="dry / live: extra `dreamcli robot run` flags")
     ap.add_argument("--handoff", default="the plate", help="where 'give it to me' puts things")
     ap.add_argument("--max-calls", type=int, default=100, help="cap on estimated billed Dream calls this session")
+    ap.add_argument("--ask", action="store_true", help="each dry / live step waits for Run or a spoken yes")
     ap.add_argument("--model", default="sonnet")
     args = ap.parse_args()
     session = Session(None, args)
     session.robot = (MockRobot(args.scene, max_calls=args.max_calls) if args.robot == "mock"
-                     else LiveRobot(args.dream_args, confirm=session.confirm, max_calls=args.max_calls,
+                     else LiveRobot(args.dream_args, confirm=session.confirm if args.ask else (lambda _: "y"),
+                                    max_calls=args.max_calls,
                                     mode=args.robot, hub=CameraHub(FRONT_CAMERA, (1280, 720))))
     app = web.Application()
     app["session"] = session
