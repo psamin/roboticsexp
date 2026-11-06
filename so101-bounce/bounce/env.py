@@ -247,6 +247,8 @@ class EnvCfg:
                                                 # level (the task level sat at 0.06, so off-centre states were rare)
     dive_p: float = 0.0                         # chance per hit of a big horizontal push in a random direction
     dive_kick: tuple = (0.15, 0.6)              # m/s: lands the ball ~5-19 cm away at a 12 cm apex (0.31 s flight)
+    dive_fwd: float = 1.0                       # scale on a big push's forward/back part (forward reach is capped by
+                                                # geometry and servo speed at ~5-7 cm per flight; sideways is not)
     # curriculum: one randomisation level per group (actuation, sensing, physics, task); each new episode draws
     # difficulty = level * U(0,1)^0.5 per group; a group's level rises while its hardest episodes mostly survive
     difficulty: float = 0.0
@@ -955,7 +957,8 @@ class BounceEnv:
                     big = (self._u(self.N) < c.dive_p).float()
                     ang = 2 * math.pi * self._u(self.N)
                     mag = (c.dive_kick[0] + (c.dive_kick[1] - c.dive_kick[0]) * self._u(self.N)) * big
-                    kick = kick + torch.stack([mag * torch.cos(ang), mag * torch.sin(ang), torch.zeros_like(mag)], -1)
+                    kick = kick + torch.stack([c.dive_fwd * mag * torch.cos(ang), mag * torch.sin(ang),
+                                               torch.zeros_like(mag)], -1)
             self.p_ball, self.v_ball, self.w_ball, touch, impact, speed, du, dv_ = B.paddle_impact(
                 self.p_ball, self.v_ball, self.w_ball, oeff, Reff, self.oeff_prev, self.Reff_prev, self.ball_prm,
                 self.blade[:, 0], self.blade[:, 1], self.blade[:, 2], self.sub_dt,
