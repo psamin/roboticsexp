@@ -110,7 +110,7 @@ def hold_here(b):
     pos = read_pos(b)
     goal = {**pos, "gripper": grip_goal(pos["gripper"])} if USE_GRIPPER else pos
     b.sync_write("Goal_Position", goal)
-    b.enable_torque()
+    b.enable_torque(num_retry=3)                    # a lost status reply (2026-11-05: elbow) aborted calibrate_camera
     return pos
 
 
