@@ -1,7 +1,7 @@
 """Level the paddle with the ball as the spirit level: hold the bounce pose, watch the ball roll, tilt the wrist
 against the roll, repeat until the ball stays put; then fit the wrist offsets (joint_map) and the hold pose to it.
 
-  uv run python real/level_ball.py [--start-tilt FWD LEFT]
+  uv run python real/level_ball.py [--start-tilt FWD LEFT] [--rolls 3] [--goal 0.6]
 
 Start with the arm folded at rest. It glides to the bounce pose and holds. Each round: set the ball near the paddle
 centre and take your hand away. The camera follows the roll for up to 1.2 s; take the ball off once it has rolled. A
@@ -95,6 +95,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--start-tilt", type=float, nargs=2, metavar=("FWD", "LEFT"),
                     help="deg: a previous run's mean real tilt at the hold pose, corrected before the first roll")
+    ap.add_argument("--rolls", type=int, default=ROLLS, help="rolls per correction (their median is used)")
+    ap.add_argument("--goal", type=float, default=GOAL_DEG, help="deg: save once the median tilt is below this")
     a = ap.parse_args()
     sign, off = rig._jmap()
     env = BounceEnv(EnvCfg(num_envs=1, device="cpu"))
@@ -138,7 +140,7 @@ def main():
             correct(np.sin(np.radians(a.start_tilt)), q, tilt_xy(kin, q))
         fixes, rolls = 0, []
         while fixes < ROUNDS:                 # a hand over the ball ends a try early: only rolls count (Ctrl-C stops)
-            print(f"fix {fixes + 1}, roll {len(rolls) + 1}/{ROLLS}: set the ball near the paddle centre, take your hand away...")
+            print(f"fix {fixes + 1}, roll {len(rolls) + 1}/{a.rolls}: set the ball near the paddle centre, take your hand away...")
             got = watch_roll(cam, finder, model, home)
             if got is None:
                 print("  did not see the ball roll on the paddle (put it near the centre); trying again")
@@ -154,15 +156,15 @@ def main():
                 print(f"  over {MAX_DEG} deg with the joints unmoved: a pushed or dropped ball; not counted")
                 continue
             rolls.append((real, q, mdl))
-            if len(rolls) < ROLLS:
+            if len(rolls) < a.rolls:
                 print("  take the ball off")
                 time.sleep(1.0)
                 continue
             real, q, mdl = np.median([r[0] for r in rolls], 0), rolls[-1][1], rolls[-1][2]
             rolls = []
             deg = np.degrees(np.arcsin(np.clip(real, -1, 1)))
-            print(f"  median of {ROLLS} rolls: {np.round(deg, 2)} deg")
-            if np.hypot(*deg) < GOAL_DEG:
+            print(f"  median of {a.rolls} rolls: {np.round(deg, 2)} deg")
+            if np.hypot(*deg) < a.goal:
                 saved = A.read_pos(b)
                 print("  level")
                 break
