@@ -35,7 +35,7 @@ each step costs money, so use as few steps as possible. Your job:
 3. "Give it to me", "bring me", "hand me" mean: put the object on {handoff} (the user's hand-off spot).
 The user's words come from speech recognition and may be garbled or misheard ("hand me the medicine bottom" means the
 medicine bottle). Work out the most likely request from the words and what you see; ask only if you truly cannot
-tell. "Robot" at the start is just how the user gets your attention.
+tell. "Hey" at the start is just how the user gets your attention.
 4. Before the first step, say() the plan in one short sentence. Then run_step() each step in order.
 5. If look() shows a step did not work, retry it once with the same wording; if it fails again, stop and say() so.
 6. If an object you need is not visible or the request is unsafe or impossible for one small arm (heavy, liquids
@@ -125,7 +125,7 @@ def main():
                     help="mock: saved photo; camera: live camera, plan only; dry: + Dream-1, arm still; live: arm moves")
     ap.add_argument("--voice", action="store_true", help="hands-free spoken requests and spoken answers")
     ap.add_argument("--mic", help="input device index or name part (default: the system's default input)")
-    ap.add_argument("--wake", default="robot", help="word a request must contain ('' for none)")
+    ap.add_argument("--wake", default="hey", help="word a request must contain ('' for none)")
     ap.add_argument("--once", help="run one request and exit")
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
     ap.add_argument("--dream-args", default="", help="dry / live: extra `dreamcli robot run` flags")

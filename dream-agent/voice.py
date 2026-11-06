@@ -92,16 +92,20 @@ class Segmenter:
 
 
 def heard_wake(text, wake):
-    """Loose match: Deepgram may write 'robot' as 'robo', 'rob it', 'row bot'."""
+    """Loose match: Deepgram may write 'robot' as 'robo', 'rob it', 'row bot'. 'hey' must be the first word ('the
+    yellow' holds 'hey' once spaces are dropped)."""
     if not wake:
         return True
     w = re.sub(r"[^a-z]", "", wake.lower())
+    if w == "hey":
+        words = re.findall(r"[a-z]+", text.lower())
+        return bool(words) and words[0] in ("hey", "hay", "hei")
     t = re.sub(r"[^a-z]", "", text.lower())
     return w in t or (w == "robot" and any(v in t for v in ("robo", "robit", "rowbot", "roabot", "robbot")))
 
 
 class Listener:
-    def __init__(self, device=None, wake="robot"):
+    def __init__(self, device=None, wake="hey"):
         self.device, self.wake, self.last_answer = device, wake, -1e9
 
     def answered(self):

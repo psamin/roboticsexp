@@ -211,7 +211,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--robot", choices=("camera", "dry", "live", "mock"), default="camera")
     ap.add_argument("--port", type=int, default=8000)
-    ap.add_argument("--wake", default="robot", help="word a request must contain ('' for none)")
+    ap.add_argument("--wake", default="hey", help="word a request must contain ('' for none)")
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
     ap.add_argument("--dream-args", default="", help="dry / live: extra `dreamcli robot run` flags")
     ap.add_argument("--handoff", default="the plate", help="where 'give it to me' puts things")

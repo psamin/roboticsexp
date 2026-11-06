@@ -66,6 +66,9 @@ def test_wake_word_is_matched_loosely():
     assert voice.heard_wake("Rob it hand me the bottle", "robot")
     assert not voice.heard_wake("pass me the salt", "robot")
     assert voice.heard_wake("pass me the salt", "")
+    assert voice.heard_wake("Hey, pick up the bottle", "hey") and voice.heard_wake("Hay pick up the bottle", "hey")
+    assert not voice.heard_wake("put the yellow cup on the plate", "hey")         # 'theyellow' holds 'hey'
+    assert not voice.heard_wake("they moved it", "hey")
 
 
 def test_wav_is_mono_int16_at_the_mic_rate():
