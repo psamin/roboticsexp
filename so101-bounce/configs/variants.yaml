@@ -684,3 +684,53 @@ v27_drop:               # round-15 action range (the policy run on the arm tonig
     max_lateral: 0.18
     w_home: 0.25
     cam_view_half: 0.14
+# Round 18d (2026-11-05): in round 18c bounces fell as dives rose (dive 25 %: 4.1 per episode, tilt-1: 6.3): half the
+# big pushes went forward or back by up to 19 cm, where the arm cannot reach (~5-7 cm per flight), so every episode met
+# an unrecoverable ball within ~6 bounces whatever the policy did. Big pushes now mostly sideways (forward/back part
+# x0.3, at most ~5 cm) and 0.1-0.45 m/s (~3-14 cm). From the round-18c best checkpoints.
+v28_reach:
+  train: *v25train
+  ppo: *v25ppo
+  env: &v28env
+    <<: *v27env
+    dive_fwd: 0.3
+    dive_kick: [0.1, 0.45]
+v28_reach_wide:
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v28env
+    action_scale: [0.70, 0.55, 0.55, 0.35, 0.30]
+    paddle_box: [0.28, 0.12]
+    max_lateral: 0.30
+    cam_view_half: 0.24
+v28_drop:
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v28env
+    action_scale: [0.20, 0.30, 0.30, 0.35, 0.30]
+    paddle_box: [0.12, 0.10]
+    max_lateral: 0.18
+    w_home: 0.25
+    cam_view_half: 0.14
+v28_reach_tilt1:        # the face steers fully
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v28env
+    tilt_authority: [1.0, 1.0]
+v28_reach_nodive:       # the measured rig only, no big pushes
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v28env
+    dive_p: 0.0
+v28_reach_soft:         # half-strength rig (strike 0.1-0.5, texture 0.02-0.07, tilt 0.6-1): is it learnable at all
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v28env
+    strike_push: [0.1, 0.5]
+    kick_range: [0.02, 0.07]
+    tilt_authority: [0.6, 1.0]
