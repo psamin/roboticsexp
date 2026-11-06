@@ -232,6 +232,14 @@ class EnvCfg:
                       (0.20, (0.78, 0.86), (0.12, 0.30)),   # worn / dusty inverted
                       (0.15, (0.80, 0.88), (0.15, 0.35)),   # short pimples
                       (0.10, (0.72, 0.82), (0.08, 0.20)))   # long pimples
+    # hits that do not average out (2026-11-05 real arm: the ball walked off the tip and left centred hits sideways,
+    # while every sim imperfection was zero-mean, so off-centre bounces drifted back to the middle)
+    impact_tip: tuple = (0.0, 0.0)              # rad, per episode: the face tips forward at each hit (the taped paddle
+                                                # pivots in the jaws): a push along the handle of tip * (1 + e0) * |v_n|
+    kick_range: tuple = ()                      # (lo, hi) m/s, per episode: std of the per-hit random push (rubber
+                                                # texture); () keeps BALL_RANGES["kick"] scaled by the physics level
+    dive_p: float = 0.0                         # chance per hit of a big horizontal push in a random direction
+    dive_kick: tuple = (0.15, 0.6)              # m/s: lands the ball ~5-19 cm away at a 12 cm apex (0.31 s flight)
     # curriculum: one randomisation level per group (actuation, sensing, physics, task); each new episode draws
     # difficulty = level * U(0,1)^0.5 per group; a group's level rises while its hardest episodes mostly survive
     difficulty: float = 0.0
@@ -315,6 +323,7 @@ class BounceEnv:
         self.age_bias_env, self.hand_t = z(N), z(N)
         self.depth_drift = z(N)                            # slowly drifting part of the overhead depth error
         self.reach_env, self.lift_env = z(N), z(N)
+        self.tip_env = z(N)
         self.boundary_g = torch.full((N,), -1, dtype=torch.long, device=dev)
         self.adr_buf = [[] for _ in range(4)]
         self.cam_bias, self.q_off = z(N, 3), z(N, J)
@@ -546,6 +555,9 @@ class BounceEnv:
         else:
             self.ball_prm["e0"][ids] = nom_e + dp * (lo_e + (hi_e - lo_e) * self._u(n) - nom_e)
             self.ball_prm["mu"][ids] = nom_m + dp * (lo_m + (hi_m - lo_m) * self._u(n) - nom_m)
+        self.tip_env[ids] = c.impact_tip[0] + (c.impact_tip[1] - c.impact_tip[0]) * self._u(n)
+        if c.kick_range:
+            self.ball_prm["kick"][ids] = c.kick_range[0] + (c.kick_range[1] - c.kick_range[0]) * self._u(n)
         self.wind[ids] = torch.cat([c.wind * dp[:, None] * (2 * self._u(n, 2) - 1), torch.zeros(n, 1, device=dev)], -1)
         self.pj_std[ids], self.pj[ids], self.pjd[ids] = LL(c.paddle_jitter, dp), 0.0, 0.0
         self.pj_w[ids] = 2 * math.pi * L(c.jitter_hz, dp)
@@ -913,11 +925,19 @@ class BounceEnv:
             self.hand_t = torch.where(push, torch.full_like(self.hand_t, 0.4), (self.hand_t - self.sub_dt).clamp(min=0))
             self.p_ball, self.v_ball = B.flight(self.p_ball, self.v_ball, self.w_ball, self.ball_prm["drag"],
                                                 self.ball_prm["magnus"], self.sub_dt, self.g_env, self.wind)
+            kick = self.ball_prm["kick"][:, None] * self._n(self.N, 3)       # applied only on a hit, along the face
+            if c.impact_tip[1] or c.dive_p:
+                vn = (self.v_ball * Reff[..., 2]).sum(-1).abs()
+                kick = kick + (self.tip_env * (1 + self.ball_prm["e0"]) * vn)[:, None] * Reff[..., 0]   # toward the tip
+                if c.dive_p:
+                    big = (self._u(self.N) < c.dive_p).float()
+                    ang = 2 * math.pi * self._u(self.N)
+                    mag = (c.dive_kick[0] + (c.dive_kick[1] - c.dive_kick[0]) * self._u(self.N)) * big
+                    kick = kick + torch.stack([mag * torch.cos(ang), mag * torch.sin(ang), torch.zeros_like(mag)], -1)
             self.p_ball, self.v_ball, self.w_ball, touch, impact, speed, du, dv_ = B.paddle_impact(
                 self.p_ball, self.v_ball, self.w_ball, oeff, Reff, self.oeff_prev, self.Reff_prev, self.ball_prm,
                 self.blade[:, 0], self.blade[:, 1], self.blade[:, 2], self.sub_dt,
-                e_noise=self.ball_prm["e_noise"] * self._n(self.N),
-                kick=self.ball_prm["kick"][:, None] * self._n(self.N, 3))
+                e_noise=self.ball_prm["e_noise"] * self._n(self.N), kick=kick)
             if self.held_on:                                         # held starts: the hand keeps the ball still
                 hold = self.hold_left > 0
                 self.p_ball = torch.where(hold[:, None], self.p_hold, self.p_ball)

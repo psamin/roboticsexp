@@ -573,3 +573,62 @@ v25_drop:               # the round-15 action range and search window (no reach 
     w_home: 0.5
     beside_offset: [0.08, 0.16]
     cam_view_half: 0.14
+# Round 18 (2026-11-05): on the real arm the ball walked off the tip (39 of 51 tries lost > 8 cm forward, run
+# 20261105-224314) and left centred hits sideways, while every sim imperfection was zero-mean, so an off-centre bounce
+# drifted back to the middle and the policy never practised recovering or diving. Each episode now has a forward tip
+# at every hit (the taped paddle pivots in the jaws: 0-3 deg, ~5 cm per bounce at 3 deg), a larger texture push, and
+# big pushes in random directions mid-rally (0.15-0.6 m/s, landing 5-19 cm away) so the arm dives throughout; weaker
+# pull home, stronger aim back to the centre and paddle-under-landing tracking. From v25-reach-3 (or v25-drop-2).
+v26_reach:
+  train: *v25train
+  ppo: *v25ppo
+  env: &v26env
+    <<: *v25env
+    impact_tip: [0.0, 0.05]
+    kick_range: [0.03, 0.12]
+    dive_p: 0.15
+    dive_kick: [0.15, 0.6]
+    w_home: 0.1
+    w_aim: 2.0
+    w_track: 2.0
+v26_reach_dive30:       # twice the big pushes
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v26env
+    dive_p: 0.3
+v26_reach_wide:         # nearer the motor limits: pan +-0.7 rad, lift / elbow +-0.55, paddle box +-28 cm, search
+  train: *v25train      # window +-26 cm (resumed with the actor rescaled from the reach range)
+  ppo: *v25ppo
+  env:
+    <<: *v26env
+    action_scale: [0.70, 0.55, 0.55, 0.35, 0.30]
+    paddle_box: [0.28, 0.12]
+    max_lateral: 0.35
+    cam_view_half: 0.26
+    beside_offset: [0.08, 0.30]
+v26_reach_nodive:       # ablation: the forward tip and texture push only
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v26env
+    dive_p: 0.0
+v26_reach_r25:          # ablation: round-18 conditions with the round-17 reward weights
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v26env
+    w_home: 0.2
+    w_aim: 1.0
+    w_track: 1.0
+v26_drop:               # round-18 conditions on the round-15 action range (the policy run on the arm tonight)
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v26env
+    action_scale: [0.20, 0.30, 0.30, 0.35, 0.30]
+    paddle_box: [0.12, 0.10]
+    max_lateral: 0.18
+    w_home: 0.25
+    beside_offset: [0.08, 0.16]
+    cam_view_half: 0.14
