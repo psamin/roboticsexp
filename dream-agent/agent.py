@@ -10,6 +10,7 @@ The agent has three tools and nothing else (no shell, no files): look at the tab
 """
 import argparse
 import asyncio
+import time
 from pathlib import Path
 
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, ResultMessage, TextBlock,
@@ -41,8 +42,8 @@ tell. "Hey" at the start is just how the user gets your attention.
 5. If look() shows a step did not work, retry it once with the same wording; if it fails again, stop and say() so.
 6. If an object you need is not visible or the request is unsafe or impossible for one small arm (heavy, liquids
    that could spill, knives, hot things, out of reach), do not move: say() why and ask what to do.
-7. If a step is skipped by the user, do not repeat it; ask what they want instead.
-8. If run_step reports the session's call budget is used up, stop and say so.
+7. If a step is skipped or stopped by the user, do not repeat it; ask what they want instead.
+8. If run_step reports the call budget is used up, do not retry: stop and say so once.
 Keep every say() under 20 words. Do not describe the image unless asked."""
 
 
@@ -63,8 +64,13 @@ def make_tools(robot, emit):
         await emit({"type": "step_result", "text": out, "calls_left": robot.budget.left})
         return {"content": [{"type": "text", "text": out}]}
 
+    last = {"text": "", "at": 0.0}
+
     @tool("say", "Say something short to the user.", {"text": str})
     async def say(args):
+        if args["text"] == last["text"] and time.time() - last["at"] < 30:     # the same sentence twice in a row
+            return {"content": [{"type": "text", "text": "already said"}]}
+        last.update(text=args["text"], at=time.time())
         await emit({"type": "say", "text": args["text"]})
         return {"content": [{"type": "text", "text": "said"}]}
 

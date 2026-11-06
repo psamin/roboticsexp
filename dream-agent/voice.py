@@ -26,6 +26,7 @@ MIN_RMS = 150       # int16 RMS a voice must exceed whatever the background
 START_S, END_S, MAX_S = 0.15, 0.8, 15.0
 FOLLOW_UP_S = 20.0  # after an answer, the next utterance needs no wake word
 DEEPGRAM = "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en"
+DEEPGRAM_TTS = "https://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=mp3"
 MIC_DENIED = ("the microphone gives pure silence: macOS has not allowed this app to use it. System Settings -> "
               "Privacy & Security -> Microphone: turn on your terminal app (Terminal, iTerm or Visual Studio Code), "
               "then quit and reopen it.")
@@ -64,6 +65,14 @@ def transcribe_wav(wav_bytes, key=None):
     with urllib.request.urlopen(req, timeout=30) as r:
         res = json.load(r)
     return res["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+
+
+def tts_mp3(text, key=None):
+    """One Deepgram text-to-speech request (billed per character). Returns MP3 bytes."""
+    req = urllib.request.Request(DEEPGRAM_TTS, json.dumps({"text": text}).encode(),
+                                 {"Authorization": f"Token {key or deepgram_key()}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.read()
 
 
 class Segmenter:

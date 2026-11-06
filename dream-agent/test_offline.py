@@ -97,6 +97,22 @@ def test_transcribe_sends_one_request_with_the_key(monkeypatch):
     assert sent[0].full_url.startswith("https://api.deepgram.com/v1/listen")
 
 
+def test_tts_sends_one_json_request_with_the_key(monkeypatch):
+    sent = []
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(voice.urllib.request, "urlopen", lambda req, timeout: sent.append(req) or Resp(b"ID3mp3"))
+    assert voice.tts_mp3("Done.", key="k") == b"ID3mp3"
+    assert len(sent) == 1 and sent[0].get_header("Authorization") == "Token k"
+    assert json.loads(sent[0].data) == {"text": "Done."} and "/v1/speak" in sent[0].full_url
+
+
 def test_mock_robot_logs_steps_and_returns_a_photo():
     if not robot.MOCK_SCENE.exists():
         pytest.skip("mock scene image is local only")
@@ -152,10 +168,12 @@ def test_call_budget_stops_steps_before_asking(never_launch_dream, tmp_path, mon
     asked = []
     monkeypatch.setattr(robot, "HERE", tmp_path)
     r = robot.LiveRobot(confirm=lambda q: asked.append(q) or "y", max_calls=40)
-    assert r.run_step("Put the box on the plate", 30).startswith("finished") and r.budget.left == 9
+    assert r.run_step("Put the box on the plate", 30).startswith("finished") and r.budget.left == 18
     assert r.steps == ["Put the box on the plate with the right arm"]
     assert r.run_step("Put the cup on the plate", 30).startswith("not run") and len(asked) == 1
     assert len(never_launch_dream) == 1
+    r.budget.reset()                                                  # a new request starts with the full budget
+    assert r.run_step("Put the cup on the plate", 30).startswith("finished") and len(never_launch_dream) == 2
     m = robot.MockRobot(max_calls=31)
     if robot.MOCK_SCENE.exists():
         assert "done" in m.run_step("a", 30) and m.run_step("b", 30).startswith("not run")

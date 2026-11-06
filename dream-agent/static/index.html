@@ -240,13 +240,28 @@ $("modeSel").onchange = () => {
   send({ type: "mode", mode: m });
 };
 
-// ---------- speech out (the browser's own voice, free) ----------
-function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.onstart = () => { speaking = true; showState(); };
-  u.onend = u.onerror = () => setTimeout(() => { speaking = false; showState(); }, 400);
-  speechSynthesis.speak(u);
+// ---------- speech out: Deepgram's voice through /tts, the browser's own if that fails; one sentence at a time ----------
+let speechQueue = Promise.resolve();
+function speak(text) { speechQueue = speechQueue.then(() => speakNow(text)); }
+
+function speakNow(text) {
+  speaking = true; showState();
+  return new Promise(async done => {
+    const end = () => setTimeout(() => { speaking = false; showState(); done(); }, 400);
+    try {
+      const r = await fetch("/tts", { method: "POST", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ text }) });
+      if (!r.ok) throw new Error(`tts ${r.status}`);
+      const a = new Audio(URL.createObjectURL(await r.blob()));
+      a.onended = a.onerror = end;
+      await a.play();
+    } catch (e) {
+      if (!("speechSynthesis" in window)) return end();
+      const u = new SpeechSynthesisUtterance(text);
+      u.onend = u.onerror = end;
+      speechSynthesis.speak(u);
+    }
+  });
 }
 
 // ---------- speech in: detect speech here, send only finished utterances ----------
@@ -258,7 +273,7 @@ function showState() {
   if (!listening) { s = "Microphone off"; h = "Click the mic and allow it. Then just talk."; }
   else if (pendingId !== null) { s = "Waiting for you: Run or Skip"; h = "Say “yes” or “no”, or use the buttons."; }
   else if (speaking) { s = "Speaking…"; h = "Not listening while it talks."; }
-  else if (busy) { s = "Working…"; h = "Planning or running a step."; }
+  else if (busy) { s = "Working…"; h = "Planning or running a step. Say “stop” to end it."; }
   else if (hearing) { s = "Hearing you…"; h = ""; }
   else {
     const w = $("wake").value.trim();
@@ -273,7 +288,7 @@ function rms(a) { let s = 0; for (const x of a) s += x * x; return Math.sqrt(s /
 function frame(f) {
   const level = rms(f);
   $("level").style.width = Math.min(100, level * 800) + "%";
-  const deaf = speaking || (busy && pendingId === null);      // don't hear its own voice; nothing to say while busy
+  const deaf = speaking;                  // don't hear its own voice; listen while busy so "stop" ends a running step
   if (seg === null) {
     floor = floor === null ? level : 0.98 * floor + 0.02 * level;
     pre.push(f); if (pre.length > PRE_S / FRAME_S) pre.shift();

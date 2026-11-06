@@ -7,7 +7,7 @@ dry     the live camera; each step runs Dream-1 through `dreamcli robot run --dr
 live    `dreamcli robot run` on station/my_robot_live.yaml: Dream-1 moves the arm. Billed.
 dry and live steps run only after the user confirms. A step's seconds count from dreamcli's "loop ready" (arm home);
 then it gets dreamcli's Ctrl-C (home, torque off). The 2026-11-05 live run made 35 calls in 57 s. An API key cannot
-read the balance, so the robots count estimated calls against a per-session cap.
+read the balance, so the robots count estimated calls against a cap per request.
 """
 import base64
 import os
@@ -31,19 +31,24 @@ FRONT_CAMERA = int(os.environ.get("FRONT_CAMERA", 0))      # overhead C920 (chec
 
 
 def step_calls(seconds):
-    """Estimated billed calls for one step: the warm-up call plus about one a second."""
-    return 1 + int(seconds)
+    """Estimated billed calls for one step: the warm-up call plus 0.7 a second (measured 35 in 57 s, 2026-11-05)."""
+    return 1 + int(0.7 * seconds)
 
 
 class Budget:
+    """Estimated calls left for the current request; reset() at each new request (no session limit)."""
+
     def __init__(self, max_calls):
-        self.left = max_calls
+        self.cap = self.left = max_calls
+
+    def reset(self):
+        self.left = self.cap
 
     def take(self, seconds):
         """None if the step fits (and is charged), else the reason it does not."""
         need = step_calls(seconds)
         if need > self.left:
-            return f"not run: the Dream call budget for this session is used up ({self.left} left, {need} needed)"
+            return f"not run: the Dream call budget for this request is used up ({self.left} left, {need} needed)"
         self.left -= need
         return None
 
@@ -166,7 +171,7 @@ class LiveRobot:
         what = ("run it on the arm (arm resting, hand on its power switch, workspace clear)" if self.mode == "live"
                 else "run Dream-1 on it (the arm does not move)")
         print(f"\n  next step: {task!r} ({seconds:.0f} s, about {step_calls(seconds)} billed calls, "
-              f"{self.budget.left} left this session)\n  {shlex.join(cmd)}")
+              f"{self.budget.left} left this request)\n  {shlex.join(cmd)}")
         if self.confirm(f"  {what}? [y/N] ").strip().lower() != "y":
             return "skipped: the user did not confirm this step"
         self.budget.take(seconds)

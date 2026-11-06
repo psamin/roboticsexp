@@ -27,6 +27,7 @@ import numpy as np
 import numpy.typing as npt
 
 from robots import config, feetech, followers, motor_arm, so101, so101_calibration
+from robots import home as dream_home
 
 ## The arm's LeRobot calibration file (`lerobot-calibrate`, arm id my_follower); SO101_CALIBRATION overrides it.
 CALIBRATION = pathlib.Path(os.environ.get(
@@ -223,6 +224,8 @@ class _Shifted(followers.Driver):
 
     def torque_off(self) -> None:
         if self._live:
+            if self._arm.rest is not None:                     # park with the jaws closed (dream parks them open)
+                self._arm.rest[-1] = self._arm.stroke.closed_mm
             self._arm.torque_off()                             # dream's driver parks where it opened, then off
         else:
             self._arm.close()                                  # never switched on: nothing to park
@@ -299,3 +302,5 @@ class WristCam:
 # dreamcli opens the cameras, then makes the dream client (which builds the IK), then opens the arms: the wrist_l camera
 # (my_robot.py:Black) imports this file first, so this runs before the IK exists.
 narrow_ik_limits()
+# dream's home move opens the gripper (robots.home.HOME_GRIPPER 1.0); this arm starts and ends with it closed, as it rests.
+dream_home.HOME_GRIPPER = 0.0

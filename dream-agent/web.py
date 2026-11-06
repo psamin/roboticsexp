@@ -89,6 +89,7 @@ class Session:
             await self.emit({"type": "note", "text": f"still working, ignored: {text}"})
             return
         self.busy = True
+        self.robot.budget.reset()                             # the call cap is per request, not per session
         await self.status()
         await self.emit({"type": "user", "text": text})
         try:
@@ -155,6 +156,17 @@ async def video(request):
     return resp
 
 
+async def tts(request):
+    """The page's spoken answers in Deepgram's voice (voice.tts_mp3); on a failure the page uses the browser's."""
+    text = str((await request.json()).get("text", ""))[:1000]
+    try:
+        audio = await asyncio.to_thread(voice.tts_mp3, text)
+    except Exception as e:
+        print(f"text-to-speech failed: {e}")
+        raise web.HTTPBadGateway()
+    return web.Response(body=audio, content_type="audio/mpeg")
+
+
 async def index(request):
     return web.FileResponse(HERE / "static/index.html")
 
@@ -216,7 +228,7 @@ def main():
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
     ap.add_argument("--dream-args", default="", help="dry / live: extra `dreamcli robot run` flags")
     ap.add_argument("--handoff", default="the plate", help="where 'give it to me' puts things")
-    ap.add_argument("--max-calls", type=int, default=100, help="cap on estimated billed Dream calls this session")
+    ap.add_argument("--max-calls", type=int, default=150, help="cap on estimated billed Dream calls per request")
     ap.add_argument("--ask", action="store_true", help="each dry / live step waits for Run or a spoken yes")
     ap.add_argument("--model", default="sonnet")
     args = ap.parse_args()
@@ -231,6 +243,7 @@ def main():
     app.router.add_get("/ws", socket)
     app.router.add_get("/video.mjpg", video)
     app.router.add_get("/dream-view.jpg", dream_view)
+    app.router.add_post("/tts", tts)
     app.router.add_static("/static/", HERE / "static")
     app.on_startup.append(start)
     app.on_cleanup.append(stop)

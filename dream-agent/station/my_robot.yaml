@@ -25,7 +25,7 @@ custom:
 # in front of the base folded the arm into itself.)
 follower_r:
   can_channel: /dev/tty.usbmodem5B790811541
-  home: [0.14, -1.71, 1.437, 0.765, -1.5708, 0.0]   # rest as read 2026-11-05 00:43, roll less ROLL_SHIFT_DEG
+  home: [0.1258, -1.7111, 1.4803, 0.7455, -1.9666, 0.0]   # the arm resting, as read 2026-11-05 21:25 (gripper closed: my_robot.py)
   region: {lo: [null, -0.12, 0.02], hi: [0.546, 0.345, 0.25]}
 # No left arm: my_robot.py keeps it in memory at so101_faas's left rest pose (dream_ik.specs), gripper open.
 follower_l:
