@@ -26,7 +26,7 @@ from claude_agent_sdk import ClaudeSDKClient
 
 import voice
 from agent import options, turn
-from robot import FRONT_CAMERA, MOCK_SCENE, WRIST_CAMERA, CameraHub, LiveRobot, MockRobot
+from robot import FRONT_CAMERA, MOCK_SCENE, CameraHub, LiveRobot, MockRobot
 
 HERE = Path(__file__).resolve().parent
 YES = re.compile(r"^\W*(yes|yeah|yep|go|go ahead|do it|run it|okay|ok|sure)\b", re.I)
@@ -150,16 +150,6 @@ async def video(request):
     return resp
 
 
-async def frame(request):
-    """Newest frame of one camera for so101/dream_run.py --frames (X-Frame-Age: seconds since capture)."""
-    hub = request.app["hubs"].get(request.match_info["name"])
-    if hub is None or hub.frame is None:
-        raise web.HTTPServiceUnavailable()
-    img, at = hub.frame, hub.at
-    jpg = await asyncio.to_thread(lambda: cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tobytes())
-    return web.Response(body=jpg, content_type="image/jpeg", headers={"X-Frame-Age": f"{time.time() - at:.4f}"})
-
-
 async def index(request):
     return web.FileResponse(HERE / "static/index.html")
 
@@ -219,27 +209,20 @@ def main():
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--wake", default="robot", help="word a request must contain ('' for none)")
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
-    ap.add_argument("--dream-args", default="", help="live: extra so101/dream_run.py flags")
+    ap.add_argument("--dream-args", default="", help="dry / live: extra `dreamcli robot run` flags")
     ap.add_argument("--handoff", default="the plate", help="where 'give it to me' puts things")
     ap.add_argument("--max-calls", type=int, default=100, help="cap on estimated billed Dream calls this session")
     ap.add_argument("--model", default="sonnet")
     args = ap.parse_args()
     session = Session(None, args)
-    hubs = {}
-    if args.robot != "mock":                    # one owner per camera, at the size the Dream model was set up for
-        fine_tune = "dream-1-ft" in args.dream_args
-        hubs = {"front": CameraHub(FRONT_CAMERA, (640, 480) if fine_tune else (1280, 720)),
-                "wrist": CameraHub(WRIST_CAMERA, (640, 480))}
     session.robot = (MockRobot(args.scene, max_calls=args.max_calls) if args.robot == "mock"
                      else LiveRobot(args.dream_args, confirm=session.confirm, max_calls=args.max_calls,
-                                    mode=args.robot, hub=hubs["front"],
-                                    frames_url=f"http://127.0.0.1:{args.port}"))
+                                    mode=args.robot, hub=CameraHub(FRONT_CAMERA, (1280, 720))))
     app = web.Application()
-    app["session"], app["hubs"] = session, hubs
+    app["session"] = session
     app.router.add_get("/", index)
     app.router.add_get("/ws", socket)
     app.router.add_get("/video.mjpg", video)
-    app.router.add_get("/frame/{name}", frame)
     app.router.add_get("/dream-view.jpg", dream_view)
     app.router.add_static("/static/", HERE / "static")
     app.on_startup.append(start)

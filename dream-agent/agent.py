@@ -53,10 +53,10 @@ def make_tools(robot, emit):
         await emit({"type": "image", "data": img})
         return {"content": [{"type": "image", "data": img, "mimeType": "image/jpeg"}]}
 
-    @tool("run_step", "Run one pick-and-place instruction on the arm with Dream-1. Blocks until it finishes.",
-          {"step": str, "seconds": int})
+    @tool("run_step", "Run one pick-and-place instruction on the arm with Dream-1 for `seconds` (default 60; one "
+          "pick-and-place took about 50 s). Blocks until it finishes.", {"step": str, "seconds": int})
     async def run_step(args):
-        seconds = max(10, min(60, int(args.get("seconds") or 30)))
+        seconds = max(10, min(90, int(args.get("seconds") or 60)))
         await emit({"type": "step", "text": args["step"], "seconds": seconds})
         out = await asyncio.to_thread(robot.run_step, args["step"], seconds)
         await emit({"type": "step_result", "text": out, "calls_left": robot.budget.left})
@@ -128,7 +128,7 @@ def main():
     ap.add_argument("--wake", default="robot", help="word a request must contain ('' for none)")
     ap.add_argument("--once", help="run one request and exit")
     ap.add_argument("--scene", default=str(MOCK_SCENE), help="mock: the table image look() returns")
-    ap.add_argument("--dream-args", default="", help="live: extra so101/dream_run.py flags, e.g. '--checkpoint ...'")
+    ap.add_argument("--dream-args", default="", help="dry / live: extra `dreamcli robot run` flags")
     ap.add_argument("--handoff", default="the plate", help="where 'give it to me' puts things: a visible object near you")
     ap.add_argument("--max-calls", type=int, default=100, help="cap on estimated billed Dream calls this session")
     ap.add_argument("--model", default="sonnet")

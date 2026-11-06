@@ -2,12 +2,12 @@
 
 mock    a saved scene image; steps are logged and reported done. Free.
 camera  the live overhead camera; steps are not run (plan only). Free.
-dry     the live camera; each step runs Dream-1 through so101/dream_run.py without --live: real inference, the arm
-        does not move. Billed.
-live    the same with --live: Dream-1 moves the arm. Billed.
-dry and live steps run only after the user confirms. dream_run.py makes one warm-up call, then about one call a
-second (so101/DREAM_DEBUG_LOG.md: 83 calls in 83 s). An API key cannot read the balance, so the robots count
-estimated calls against a per-session cap.
+dry     the live camera; each step runs Dream-1 through `dreamcli robot run --dry-run` on station/my_robot.yaml:
+        real inference, the arm does not move. Billed.
+live    `dreamcli robot run` on station/my_robot_live.yaml: Dream-1 moves the arm. Billed.
+dry and live steps run only after the user confirms. A step's seconds count from dreamcli's "loop ready" (arm home);
+then it gets dreamcli's Ctrl-C (home, torque off). The 2026-11-05 live run made 35 calls in 57 s. An API key cannot
+read the balance, so the robots count estimated calls against a per-session cap.
 """
 import base64
 import os
@@ -22,10 +22,12 @@ import cv2
 
 HERE = Path(__file__).resolve().parent
 SO101 = HERE.parent / "so101"
+STATION = HERE / "station"
 DREAM_PY = Path(os.environ.get("DREAM_PY", Path.home() / "dream-env/bin/python"))
+CHECKPOINT = "dreamlabs/dream-1-beta"
+READY = "robots.control: loop ready"          # dreamcli's log line once the arm is home and the loop runs
 MOCK_SCENE = SO101 / "logs/dream-dry-20261020-232914/chunk1_scene.jpg"   # bottle, cup, box and plate on the table
 FRONT_CAMERA = int(os.environ.get("FRONT_CAMERA", 0))      # overhead C920 (checked 2026-11-05: 1 wrist, 2 laptop)
-WRIST_CAMERA = int(os.environ.get("WRIST_CAMERA", 1))
 
 
 def step_calls(seconds):
@@ -54,7 +56,7 @@ def jpeg_b64(img, width=640):
 
 class CameraHub:
     """The overhead camera, read continuously on a thread for look() and the page's video. Released while
-    dream_run.py runs a step (it opens the cameras itself)."""
+    dreamcli runs a step (it opens the cameras itself)."""
 
     def __init__(self, index=FRONT_CAMERA, size=(1280, 720)):
         self.index, self.size, self.frame, self.at, self.paused, self.cap = index, size, None, 0.0, False, None
@@ -119,22 +121,23 @@ class LiveRobot:
     """mode camera / dry / live (see the top of this file)."""
     live = True
 
-    def __init__(self, dream_args="", confirm=input, max_calls=100, mode="live", hub=None, frames_url=None):
-        """frames_url: dream_run.py reads both cameras from that server (web.py) instead of opening them."""
+    def __init__(self, dream_args="", confirm=input, max_calls=100, mode="live", hub=None):
+        """dream_args: extra `dreamcli robot run` flags."""
         self.dream_args, self.confirm, self.steps = shlex.split(dream_args), confirm, []
-        self.budget, self.mode, self.hub, self.frames_url = Budget(max_calls), mode, hub, frames_url
-        self.proc = None                                      # the running dream_run.py, for stop()
-        a = self.dream_args
-        if "--side" not in a:                     # docs (On another arm): one arm plays the right arm; always explicit,
-            a += ["--side", "right"]              # so every step uses the same side and the same zero correction
-        self.side = a[a.index("--side") + 1]
+        self.budget, self.mode, self.hub = Budget(max_calls), mode, hub
+        self.proc, self.interrupted = None, None              # the running dreamcli, and who sent its one Ctrl-C
 
-    def stop(self):
-        """One Ctrl-C to the running step: dream_run.py stops and glides the arm back."""
-        if self.proc is not None and self.proc.poll() is None:
+    def _interrupt(self, who):
+        """dreamcli's Ctrl-C, once per step (a second one could cut its homing short)."""
+        if self.proc is not None and self.proc.poll() is None and self.interrupted is None:
+            self.interrupted = who
             self.proc.send_signal(signal.SIGINT)
             return True
         return False
+
+    def stop(self):
+        """Ctrl-C to the running step: dreamcli homes the arm and switches it off."""
+        return self._interrupt("user")
 
     def look(self):
         if self.hub is not None:
@@ -153,10 +156,11 @@ class LiveRobot:
         if self.mode == "camera":
             return (f"not run (camera-only mode: no Dream, no arm): {step!r}. The photo will not change; treat the "
                     "step as having worked.")
-        task = step if " arm" in step.lower() else f"{step.rstrip('.')} with the {self.side} arm"   # docs: name the arm
-        cmd = [str(DREAM_PY), str(SO101 / "dream_run.py"), *(["--live"] if self.mode == "live" else []),
-               "--task", task, "--seconds", str(seconds), *self.dream_args,
-               *(["--frames", self.frames_url] if self.frames_url else [])]
+        task = step if " arm" in step.lower() else f"{step.rstrip('.')} with the right arm"   # docs: name the arm
+        config = STATION / ("my_robot_live.yaml" if self.mode == "live" else "my_robot.yaml")
+        cmd = [str(DREAM_PY), str(DREAM_PY.parent / "dreamcli"), "robot", "run", "--config", str(config),
+               "--checkpoint", CHECKPOINT, "--task", task, *(["--dry-run"] if self.mode != "live" else []),
+               *self.dream_args]
         if step_calls(seconds) > self.budget.left:
             return self.budget.take(seconds)
         what = ("run it on the arm (arm resting, hand on its power switch, workspace clear)" if self.mode == "live"
@@ -168,21 +172,29 @@ class LiveRobot:
         self.budget.take(seconds)
         self.steps.append(task)
         t0 = time.time()
-        share = self.frames_url is not None                     # else dream_run.py opens the cameras itself
-        if self.hub is not None and not share:
-            self.hub.pause()
+        if self.hub is not None:
+            self.hub.pause()                                    # dreamcli opens both cameras itself
         log = HERE / "logs" / f"step-{time.strftime('%Y%m%d-%H%M%S')}-{self.mode}.log"
         log.parent.mkdir(exist_ok=True)
         try:
             with open(log, "w") as f:
-                self.proc = subprocess.Popen(cmd, cwd=SO101, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
-                                             text=True)
-                self.proc.communicate("\n")                    # the user's yes above answers dream_run.py's LIVE prompt
-                r, self.proc = self.proc, None
+                self.interrupted = None
+                self.proc = r = subprocess.Popen(cmd, cwd=STATION, stdout=f, stderr=subprocess.STDOUT,
+                                                 stdin=subprocess.DEVNULL, text=True)
+                end = None
+                while r.poll() is None:
+                    if end is None and READY in log.read_text():
+                        end = time.time() + seconds             # the step's time counts from the loop's start
+                    if end is not None and time.time() > end:
+                        self._interrupt("timer")
+                    time.sleep(0.2)
+                r.wait()
+                self.proc = None
         finally:
-            if self.hub is not None and not share:
+            if self.hub is not None:
                 self.hub.resume()
-        done = "finished" if r.returncode == 0 else f"failed (exit {r.returncode})"
+        done = {"timer": "finished", "user": "stopped by the user"}.get(
+            self.interrupted, "finished" if r.returncode == 0 else f"failed (exit {r.returncode})")
         tail = " | ".join(l.strip() for l in log.read_text().splitlines()[-3:] if l.strip())
         return (f"{done} after {time.time() - t0:.0f} s" + ("" if self.mode == "live" else " (dry run: the arm did "
-                "not move)") + f". dream_run.py: {tail[-300:]} (log {log.name})")
+                "not move)") + f". dreamcli: {tail[-300:]} (log {log.name})")

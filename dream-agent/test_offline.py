@@ -19,10 +19,13 @@ class FakeProc:
     def poll(self):
         return 0
 
+    def wait(self, timeout=None):
+        return 0
+
 
 @pytest.fixture(autouse=True)
 def never_launch_dream(monkeypatch):
-    """No test may start dream_run.py: process launches are faked and Dream points at /usr/bin/false. (A test that
+    """No test may start dreamcli: process launches are faked and Dream points at /usr/bin/false. (A test that
     only faked subprocess.run once started four real --live runs after LiveRobot moved to Popen.)"""
     launched = []
     monkeypatch.setattr(robot, "DREAM_PY", robot.Path("/usr/bin/false"))
@@ -107,15 +110,45 @@ def test_live_robot_needs_a_typed_y(never_launch_dream, tmp_path, monkeypatch):
     assert robot.LiveRobot(confirm=lambda _: "yes").run_step("Pick up the box", 30).startswith("skipped")
     assert not launched
     out = robot.LiveRobot(confirm=lambda _: "y").run_step("Pick up the box", 30)
-    assert out.startswith("finished") and len(launched) == 1 and "--live" in launched[0]
-    assert launched[0][0] == "/usr/bin/false"                          # never the real dream_run.py
-    assert "Pick up the box with the right arm" in launched[0] and "--side" in launched[0]   # one explicit side
+    assert out.startswith("finished") and len(launched) == 1
+    assert launched[0][0] == "/usr/bin/false"                          # never the real dreamcli
+    assert launched[0][launched[0].index("--config") + 1].endswith("station/my_robot_live.yaml")
+    assert "--dry-run" not in launched[0] and "Pick up the box with the right arm" in launched[0]
+
+
+def test_step_gets_one_ctrl_c_after_its_seconds(never_launch_dream, tmp_path, monkeypatch):
+    """The seconds count from dreamcli's loop-ready line; then one SIGINT (dreamcli homes the arm and switches off)."""
+    signals = []
+
+    class Running(FakeProc):
+        def __init__(self, cmd, stdout=None, **kw):
+            never_launch_dream.append(cmd)
+            stdout.write(f"x INFO {robot.READY}: 3 cameras publishing\n")
+            stdout.flush()
+            self.done = None
+
+        def poll(self):
+            return self.done
+
+        def send_signal(self, sig):
+            signals.append(sig)
+            self.done = 0
+
+    monkeypatch.setattr(robot, "HERE", tmp_path)
+    monkeypatch.setattr(robot.subprocess, "Popen", Running)
+    r = robot.LiveRobot(confirm=lambda _: "y", mode="dry")
+    t0 = robot.time.time()
+    out = r.run_step("Put the box on the plate", 1)
+    assert out.startswith("finished") and 1 <= robot.time.time() - t0 < 3
+    assert signals == [robot.signal.SIGINT] and "--dry-run" in never_launch_dream[0]
+    assert never_launch_dream[0][never_launch_dream[0].index("--config") + 1].endswith("station/my_robot.yaml")
+    assert not r.stop()                                                # nothing left running
 
 
 def test_call_budget_stops_steps_before_asking(never_launch_dream, tmp_path, monkeypatch):
     asked = []
     monkeypatch.setattr(robot, "HERE", tmp_path)
-    r = robot.LiveRobot("--side right", confirm=lambda q: asked.append(q) or "y", max_calls=40)
+    r = robot.LiveRobot(confirm=lambda q: asked.append(q) or "y", max_calls=40)
     assert r.run_step("Put the box on the plate", 30).startswith("finished") and r.budget.left == 9
     assert r.steps == ["Put the box on the plate with the right arm"]
     assert r.run_step("Put the cup on the plate", 30).startswith("not run") and len(asked) == 1
