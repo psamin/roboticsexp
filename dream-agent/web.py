@@ -103,7 +103,11 @@ class Session:
             rate, audio = w.getframerate(), np.frombuffer(w.readframes(w.getnframes()), np.int16)
         if not voice.worth_sending(audio, rate):              # never pay for silence
             return
-        text = await asyncio.to_thread(voice.transcribe_wav, wav_bytes)
+        try:
+            text = await asyncio.to_thread(voice.transcribe_wav, wav_bytes)
+        except Exception as e:                                # e.g. a rejected key: show it on the page
+            await self.emit({"type": "note", "text": f"speech-to-text failed: {e}"})
+            return
         if not text:
             return
         if STOP.search(text) and self.stop_arm():
