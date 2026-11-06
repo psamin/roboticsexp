@@ -1,14 +1,15 @@
 """Level the paddle with the ball as the spirit level: hold the bounce pose, watch the ball roll, tilt the wrist
 against the roll, repeat until the ball stays put; then fit the wrist offsets (joint_map) and the hold pose to it.
 
-  uv run python real/level_ball.py
+  uv run python real/level_ball.py [--start-tilt FWD LEFT]
 
 Start with the arm folded at rest. It glides to the bounce pose and holds. Each round: set the ball near the paddle
 centre and take your hand away. The camera follows the roll for up to 1.2 s; take the ball off once it has rolled. A
 hollow ball rolls with acceleration 0.6 g sin(tilt) toward where the face slopes down, so the roll gives the real
-tilt. The script compares it with the tilt the model computes from the joints and corrects the wrist. If a correction
-makes the roll worse, a wrist direction in the joint map is reversed: it says which and stops without saving.
+tilt. One roll varies by 1-2 deg (wrist slack, the hand setting the ball), so the script takes the median of ROLLS rolls,
+corrects the wrist against it, and saves once it is below GOAL_DEG.
 """
+import argparse
 import json
 import sys
 import time
@@ -25,8 +26,11 @@ import rig                                                         # noqa: E402
 from bounce.env import BounceEnv, EnvCfg                           # noqa: E402
 
 G = 9.81
-GOAL_DEG = 0.4                      # stop when the real tilt is below this
-ROUNDS = 8
+GOAL_DEG = 0.6                      # stop when the median real tilt is below this (the wrist has ~1.5 deg of slack)
+ROUNDS = 8                          # corrections
+ROLLS = 3                           # rolls per correction (median): one roll varies 1-2 deg (slack, hand)
+MAX_DEG = 6.0                       # a roll reading more is a pushed or dropped ball (one read 13.6 deg)
+MIN_FRAMES = 12                     # an 8-frame roll (0.33 s) read 9.4 deg and aborted the 2026-11-05 levelling
 
 
 def tilt_xy(kin, q):
@@ -34,9 +38,15 @@ def tilt_xy(kin, q):
     return kin.forward(torch.tensor(q, dtype=torch.float32)[None])["paddle_R"][0, :2, 2].numpy().astype(float)
 
 
+def on_plane(model, u, v, z):
+    """Where the pixel's ray meets the level plane at height z (base frame): a ball rolling on the paddle."""
+    d = model.R @ np.array([(u - model.K[0, 2]) / model.K[0, 0], (v - model.K[1, 2]) / model.K[1, 1], 1.0])
+    return model.t + d * (z - model.t[2]) / d[2]
+
+
 def watch_roll(cam, finder, model, home, timeout=60.0):
     """Wait for the ball on the paddle, follow it for up to 1.2 s; return the real face normal xy from its roll."""
-    t_end, last, track = time.perf_counter() + timeout, -1, []
+    t_end, last, track, seen, off = time.perf_counter() + timeout, -1, [], 0, None
     while time.perf_counter() < t_end:
         frame, tc, n = cam.get()
         if frame is None or n == last:
@@ -48,16 +58,20 @@ def watch_roll(cam, finder, model, home, timeout=60.0):
             if track and tc - track[-1][0] > 0.2:
                 break                                              # lost it (rolled off or taken away)
             continue
-        p = model.ball_position(*d) - home
-        on = np.hypot(p[0], p[1]) < 0.07 and abs(p[2]) < 0.05
+        seen += 1
+        p = on_plane(model, d[0], d[1], home[2] + rig.BALL_RADIUS) - home
+        z = (model.ball_position(*d) - home)[2]        # from the ball's size: 1 px of radius is ~4 cm, so only loosely
+        on = np.hypot(p[0], p[1]) < 0.07 and abs(z) < 0.10
         if not on:
+            off = (round(100 * p[0], 1), round(100 * p[1], 1), round(100 * z, 1))
             if track:
                 break
             continue
         track.append((tc, p[0], p[1]))
         if track[-1][0] - track[0][0] > 1.2:
             break
-    if len(track) < 8:
+    if len(track) < MIN_FRAMES:
+        print(f"  ball seen in {seen} frames, {len(track)} in a row on the paddle (last off-paddle x, y, z cm: {off})")
         return None
     a = np.array(track)
     t = a[:, 0] - a[0, 0]
@@ -78,6 +92,10 @@ def trim_sag(b, target, cmd, n=150):
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--start-tilt", type=float, nargs=2, metavar=("FWD", "LEFT"),
+                    help="deg: a previous run's mean real tilt at the hold pose, corrected before the first roll")
+    a = ap.parse_args()
     sign, off = rig._jmap()
     env = BounceEnv(EnvCfg(num_envs=1, device="cpu"))
     kin, q_home = env.kin, env.q_nom.numpy().astype(float)
@@ -99,9 +117,28 @@ def main():
         q = rig.deg_to_sim(A.read_pos(b))
         home = kin.forward(torch.tensor(q, dtype=torch.float32)[None])["paddle_o"][0].numpy()
         finder.roi = model.paddle_roi(home, size=(cc["width"], cc["height"]))  # only look around the paddle
-        prev = None
-        for k in range(ROUNDS):
-            print(f"round {k + 1}: set the ball near the paddle centre and take your hand away...")
+        def correct(real, q, mdl):
+            """Tilt the wrist against the slope `real` (face normal xy), measured at sim pose q where the model said mdl."""
+            nonlocal target, cmd
+            J = np.stack([(tilt_xy(kin, q + 0.005 * np.eye(5)[j]) - mdl) / 0.005 for j in (3, 4)], 1)
+            dq = np.clip(np.linalg.solve(J, -real), -np.radians(3), np.radians(3))
+            q_tgt = rig.deg_to_sim(target)
+            q_tgt[3:5] += dq
+            new_target = rig.sim_to_deg(q_tgt)
+            new = {n: cmd[n] + new_target[n] - target[n] for n in A.ARM}
+            for s in np.linspace(0, 1, 30)[1:]:                    # ramp the held command by the correction
+                b.sync_write("Goal_Position", {n: cmd[n] + s * (new[n] - cmd[n]) for n in A.ARM})
+                time.sleep(0.02)
+            target, cmd = new_target, trim_sag(b, new_target, new, n=75)   # then make the joints reach it (slack)
+            print(f"  wrist flex {np.degrees(dq[0]):+.2f} deg, roll {np.degrees(dq[1]):+.2f} deg")
+
+        if a.start_tilt:
+            q = rig.deg_to_sim(A.read_pos(b))
+            print(f"starting from a tilt of {a.start_tilt} deg (forward, left) at the hold pose")
+            correct(np.sin(np.radians(a.start_tilt)), q, tilt_xy(kin, q))
+        fixes, rolls = 0, []
+        while fixes < ROUNDS:                 # a hand over the ball ends a try early: only rolls count (Ctrl-C stops)
+            print(f"fix {fixes + 1}, roll {len(rolls) + 1}/{ROLLS}: set the ball near the paddle centre, take your hand away...")
             got = watch_roll(cam, finder, model, home)
             if got is None:
                 print("  did not see the ball roll on the paddle (put it near the centre); trying again")
@@ -113,31 +150,25 @@ def main():
             deg = np.degrees(np.arcsin(np.clip(real, -1, 1)))
             print(f"  real tilt {np.round(deg, 2)} deg (toward +x forward, +y left) from {nfr} frames over {span:.2f} s; "
                   f"model says {np.round(np.degrees(mdl), 2)}; wrist flex {pos['wrist_flex']:.2f}, roll {pos['wrist_roll']:.2f}")
+            if np.hypot(*deg) > MAX_DEG:
+                print(f"  over {MAX_DEG} deg with the joints unmoved: a pushed or dropped ball; not counted")
+                continue
+            rolls.append((real, q, mdl))
+            if len(rolls) < ROLLS:
+                print("  take the ball off")
+                time.sleep(1.0)
+                continue
+            real, q, mdl = np.median([r[0] for r in rolls], 0), rolls[-1][1], rolls[-1][2]
+            rolls = []
+            deg = np.degrees(np.arcsin(np.clip(real, -1, 1)))
+            print(f"  median of {ROLLS} rolls: {np.round(deg, 2)} deg")
             if np.hypot(*deg) < GOAL_DEG:
                 saved = A.read_pos(b)
                 print("  level")
                 break
-            if prev is not None and np.hypot(*deg) > 1.3 * np.hypot(*prev[0]):
-                dmdl = mdl - prev[1]                               # how the model moved vs how reality moved
-                dreal = real - np.sin(np.radians(prev[0]))
-                bad = [nm for nm, i in (("wrist_flex (forward/back)", 0), ("wrist_roll (left/right)", 1))
-                       if abs(dmdl[i]) > 0.005 and np.sign(dmdl[i]) != np.sign(dreal[i])]
-                raise SystemExit(f"the correction made it worse: real tilt went {np.round(prev[0], 2)} -> {np.round(deg, 2)} deg "
-                                 f"while the model moved {np.round(np.degrees(dmdl), 2)}. Reversed in the joint map: "
-                                 f"{', '.join(bad) or 'unclear (noisy roll; run again)'}. Nothing saved.")
-            J = np.stack([(tilt_xy(kin, q + 0.005 * np.eye(5)[j]) - mdl) / 0.005 for j in (3, 4)], 1)
-            dq = np.linalg.solve(J, -real)                         # tilt the wrist against the measured slope
-            dq = np.clip(dq, -np.radians(3), np.radians(3))
-            q_tgt = rig.deg_to_sim(target)
-            q_tgt[3:5] += dq
-            new_target = rig.sim_to_deg(q_tgt)
-            new = {n: cmd[n] + new_target[n] - target[n] for n in A.ARM}
-            for s in np.linspace(0, 1, 30)[1:]:                    # ramp the held command by the correction
-                b.sync_write("Goal_Position", {n: cmd[n] + s * (new[n] - cmd[n]) for n in A.ARM})
-                time.sleep(0.02)
-            target, cmd = new_target, trim_sag(b, new_target, new, n=75)   # then make the joints reach it (slack)
-            prev = (deg, mdl)
-            print(f"  wrist flex {np.degrees(dq[0]):+.2f} deg, roll {np.degrees(dq[1]):+.2f} deg; take the ball off")
+            correct(real, q, mdl)
+            fixes += 1
+            print("  take the ball off")
             time.sleep(1.0)
     except KeyboardInterrupt:
         print("stopped")
