@@ -2,6 +2,8 @@
 from dataclasses import asdict, dataclass, field
 
 import torch
+
+WARMUP_UPDATES, WARMUP_FROM = 150, 0.05   # updates, and the starting fraction of the step size
 from torch import nn
 
 from .networks import Critic, SquashedGaussianActor, squash_log_prob
@@ -49,6 +51,7 @@ class PPO:
         self.actor = SquashedGaussianActor(obs_dim, act_dim, cfg.hidden, cfg.init_std, cfg.min_log_std).to(self.device)
         self.critic = Critic(self.critic_dim, cfg.hidden).to(self.device)
         self.lr = cfg.lr
+        self.lr_scale, self.warmup_left = 1.0, 0             # after a resume without optimizer state (see load)
         self.opt = torch.optim.Adam(list(self.actor.parameters()) + list(self.critic.parameters()), lr=cfg.lr)
 
     @torch.no_grad()
@@ -67,10 +70,14 @@ class PPO:
     def _set_lr(self, lr):
         self.lr = float(min(max(lr, self.cfg.lr_bounds[0]), self.cfg.lr_bounds[1]))
         for g in self.opt.param_groups:
-            g["lr"] = self.lr
+            g["lr"] = self.lr * self.lr_scale
 
     def update(self, buf: RolloutBuffer) -> dict:
         c = self.cfg
+        if self.warmup_left:                                  # ramp the step size back up after a fresh optimizer
+            self.warmup_left -= 1
+            self.lr_scale = 1.0 - (1.0 - WARMUP_FROM) * self.warmup_left / WARMUP_UPDATES
+            self._set_lr(self.lr)
         sums, n = {}, 0
         for _ in range(c.epochs):
             for mb in buf.minibatches(c.num_minibatches):
@@ -122,6 +129,11 @@ class PPO:
         self.critic.load_state_dict(critic)
         if load_optimizer and "opt" in sd and not widened:
             self.opt.load_state_dict(sd["opt"])
+            self._set_lr(sd.get("lr", self.cfg.lr))
+        elif load_optimizer:
+            # a fresh Adam moves every weight by about the step size, including inputs a widened checkpoint gave zero
+            # weights: with 24 detections that wrecked the policy within 10 updates (round 18f). Ramp the step size.
+            self.warmup_left, self.lr_scale = WARMUP_UPDATES, WARMUP_FROM
             self._set_lr(sd.get("lr", self.cfg.lr))
 
     def save(self, path, **extra):
