@@ -33,7 +33,8 @@ class Trainer:
             self.eval_history = ex.get("eval_history", [])
             env.level = ex.get("level", env.level)
             if ex.get("levels"):
-                env.levels = list(ex["levels"])
+                floor = getattr(env.cfg, "adr_floor", ()) or (0.0,) * len(ex["levels"])
+                env.levels = [max(v, f) for v, f in zip(ex["levels"], floor)]       # the config's floor still holds
             print(f"[train] resumed {resume} at iteration {self.it}, level {env.level:.2f}", flush=True)
         self.csv_f = open(os.path.join(out_dir, "metrics.csv"), "a", newline="")
         self.csv_w = None

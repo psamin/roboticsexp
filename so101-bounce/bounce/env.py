@@ -238,6 +238,13 @@ class EnvCfg:
                                                 # pivots in the jaws): a push along the handle of tip * (1 + e0) * |v_n|
     kick_range: tuple = ()                      # (lo, hi) m/s, per episode: std of the per-hit random push (rubber
                                                 # texture); () keeps BALL_RANGES["kick"] scaled by the physics level
+    strike_push: tuple = (0.0, 0.0)             # (lo, hi) per episode: push toward the tip = k * the paddle's upward
+                                                # speed at the hit (measured k 0.45-0.8 on rally hits, ~0 on a still
+                                                # paddle's first catch; impact_tip's |v_n| scaling had it backwards)
+    tilt_authority: tuple = (1.0, 1.0)          # (lo, hi) per episode: share of the face's tilt away from the hold pose
+                                                # that reaches the ball at a hit (the re-taped paddle barely steered it)
+    adr_floor: tuple = ()                       # per group (actuation, sensing, physics, task): the curriculum's lowest
+                                                # level (the task level sat at 0.06, so off-centre states were rare)
     dive_p: float = 0.0                         # chance per hit of a big horizontal push in a random direction
     dive_kick: tuple = (0.15, 0.6)              # m/s: lands the ball ~5-19 cm away at a 12 cm apex (0.31 s flight)
     # curriculum: one randomisation level per group (actuation, sensing, physics, task); each new episode draws
@@ -281,7 +288,7 @@ class BounceEnv:
         self.g = torch.tensor([0.0, 0.0, -9.81], device=dev)
         self.push_std = torch.tensor(c.push_std, device=dev)
         self.g_env = self.g.expand(N, 3).clone()          # per-episode gravity in the robot frame (table tilt)
-        self.levels = [float(c.difficulty)] * 4      # actuation, sensing, physics, task
+        self.levels = [max(float(c.difficulty), c.adr_floor[g] if c.adr_floor else 0.0) for g in range(4)]   # actuation, sensing, physics, task
         self.paddle_rot0 = self.kin.paddle_rot[0].clone()
         self.paddle_pos0 = self.kin.paddle_pos[0].clone()
         self.ipos_paddle0 = self.kin.ipos[0, self.kin.paddle].clone()
@@ -323,7 +330,8 @@ class BounceEnv:
         self.age_bias_env, self.hand_t = z(N), z(N)
         self.depth_drift = z(N)                            # slowly drifting part of the overhead depth error
         self.reach_env, self.lift_env = z(N), z(N)
-        self.tip_env = z(N)
+        self.tip_env, self.strike_k, self.tilt_g = z(N), z(N), torch.ones(N, device=dev)
+        self.home_R = torch.eye(3, device=dev).expand(N, 3, 3).clone()
         self.boundary_g = torch.full((N,), -1, dtype=torch.long, device=dev)
         self.adr_buf = [[] for _ in range(4)]
         self.cam_bias, self.q_off = z(N, 3), z(N, J)
@@ -556,6 +564,8 @@ class BounceEnv:
             self.ball_prm["e0"][ids] = nom_e + dp * (lo_e + (hi_e - lo_e) * self._u(n) - nom_e)
             self.ball_prm["mu"][ids] = nom_m + dp * (lo_m + (hi_m - lo_m) * self._u(n) - nom_m)
         self.tip_env[ids] = c.impact_tip[0] + (c.impact_tip[1] - c.impact_tip[0]) * self._u(n)
+        self.strike_k[ids] = c.strike_push[0] + (c.strike_push[1] - c.strike_push[0]) * self._u(n)
+        self.tilt_g[ids] = c.tilt_authority[0] + (c.tilt_authority[1] - c.tilt_authority[0]) * self._u(n)
         if c.kick_range:
             self.ball_prm["kick"][ids] = c.kick_range[0] + (c.kick_range[1] - c.kick_range[0]) * self._u(n)
         self.wind[ids] = torch.cat([c.wind * dp[:, None] * (2 * self._u(n, 2) - 1), torch.zeros(n, 1, device=dev)], -1)
@@ -648,6 +658,8 @@ class BounceEnv:
         ds_q = ds if c.joint_offset_full_p <= 0 else torch.where(self._u(n) < c.joint_offset_full_p, 1.0, ds)
         self.q_off[ids] = c.joint_offset * ds_q[:, None] * (2 * self._u(n, J) - 1)
         self.home_env[ids] = self.kin_nominal.forward(q_level + self.q_off[ids])["paddle_o"]
+        if c.tilt_authority[0] < 1:
+            self.home_R[ids] = self._fk_ids(q_level, ids)["paddle_R"]         # the face at the hold pose
         p_fly = self.home_env[ids] + torch.cat([lat, (h0 + B.RADIUS)[:, None]], -1)
         v_fly = torch.cat([(0.02 + 0.13 * dt_)[:, None] * (2 * self._u(n, 2) - 1), (2 * self._u(n, 1) - 1) * 1.0], -1)
         if drop:
@@ -925,7 +937,17 @@ class BounceEnv:
             self.hand_t = torch.where(push, torch.full_like(self.hand_t, 0.4), (self.hand_t - self.sub_dt).clamp(min=0))
             self.p_ball, self.v_ball = B.flight(self.p_ball, self.v_ball, self.w_ball, self.ball_prm["drag"],
                                                 self.ball_prm["magnus"], self.sub_dt, self.g_env, self.wind)
+            if c.tilt_authority[0] < 1:                  # only tilt_g of the face's tilt from the hold pose reaches the ball
+                n0, nh = Reff[..., 2], self.home_R[..., 2]
+                ng = nh + self.tilt_g[:, None] * (n0 - nh)
+                ng = ng / ng.norm(dim=-1, keepdim=True)
+                ax = torch.cross(n0, ng, dim=-1)
+                s = ax.norm(dim=-1)
+                Reff = axis_angle(ax / s.clamp(min=1e-9)[:, None], torch.asin(s.clamp(max=1.0))) @ Reff
             kick = self.ball_prm["kick"][:, None] * self._n(self.N, 3)       # applied only on a hit, along the face
+            if c.strike_push[1]:                         # the face gives toward the tip under a fast upward strike
+                vp = (((oeff - self.oeff_prev) / self.sub_dt) * Reff[..., 2]).sum(-1).clamp(min=0)
+                kick = kick + (self.strike_k * vp)[:, None] * Reff[..., 0]
             if c.impact_tip[1] or c.dive_p:
                 vn = (self.v_ball * Reff[..., 2]).sum(-1).abs()
                 kick = kick + (self.tip_env * (1 + self.ball_prm["e0"]) * vn)[:, None] * Reff[..., 0]   # toward the tip
@@ -1277,5 +1299,5 @@ class BounceEnv:
                 if perf > self.cfg.adr_up:
                     self.levels[g] = min(1.0, self.levels[g] + self.cfg.adr_step)
                 elif perf < self.cfg.adr_down:
-                    self.levels[g] = max(0.0, self.levels[g] - self.cfg.adr_step)
+                    self.levels[g] = max(self.cfg.adr_floor[g] if self.cfg.adr_floor else 0.0, self.levels[g] - self.cfg.adr_step)
                 self.adr_buf[g] = []
