@@ -734,3 +734,37 @@ v28_reach_soft:         # half-strength rig (strike 0.1-0.5, texture 0.02-0.07, 
     strike_push: [0.1, 0.5]
     kick_range: [0.02, 0.07]
     tilt_authority: [0.6, 1.0]
+# Round 18e (2026-11-06): round 18d plateaued from ~25 min (in their own worlds: soft 48-51 %, no-dive 16-19 %, the rest
+# 3-11 %). The critic now sees each episode's hidden strike push, tilt authority, texture and tip (critic_rig), and the
+# half-strength run moves up to the full rig (a two-step curriculum). Each from its round-18d line's best checkpoint.
+v29_reach:
+  train: *v25train
+  ppo: *v25ppo
+  env: &v29env
+    <<: *v28env
+    critic_rig: true
+v29_reach_wide:
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v29env
+    action_scale: [0.70, 0.55, 0.55, 0.35, 0.30]
+    paddle_box: [0.28, 0.12]
+    max_lateral: 0.30
+    cam_view_half: 0.24
+v29_drop:
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v29env
+    action_scale: [0.20, 0.30, 0.30, 0.35, 0.30]
+    paddle_box: [0.12, 0.10]
+    max_lateral: 0.18
+    w_home: 0.25
+    cam_view_half: 0.14
+v29_reach_nodive:
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v29env
+    dive_p: 0.0
