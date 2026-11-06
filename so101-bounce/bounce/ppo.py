@@ -113,8 +113,14 @@ class PPO:
 
     def load_state_dict(self, sd, load_optimizer: bool = True):
         self.actor.load_state_dict(sd["actor"])
-        self.critic.load_state_dict(sd["critic"])
-        if load_optimizer and "opt" in sd:
+        critic, own, widened = dict(sd["critic"]), self.critic.state_dict(), False
+        for k, v in critic.items():                  # a critic given new privileged inputs: zero weights for them
+            if v.dim() == 2 and v.shape[0] == own[k].shape[0] and v.shape[1] < own[k].shape[1]:
+                w = torch.zeros_like(own[k])
+                w[:, :v.shape[1]] = v
+                critic[k], widened = w, True
+        self.critic.load_state_dict(critic)
+        if load_optimizer and "opt" in sd and not widened:
             self.opt.load_state_dict(sd["opt"])
             self._set_lr(sd.get("lr", self.cfg.lr))
 

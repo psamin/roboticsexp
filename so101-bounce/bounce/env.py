@@ -245,6 +245,8 @@ class EnvCfg:
                                                 # that reaches the ball at a hit (the re-taped paddle barely steered it)
     adr_floor: tuple = ()                       # per group (actuation, sensing, physics, task): the curriculum's lowest
                                                 # level (the task level sat at 0.06, so off-centre states were rare)
+    critic_rig: bool = False                    # the critic also sees each episode's strike push, tilt authority,
+                                                # texture push and impact tip (hidden from the actor, as on the arm)
     dive_p: float = 0.0                         # chance per hit of a big horizontal push in a random direction
     dive_kick: tuple = (0.15, 0.6)              # m/s: lands the ball ~5-19 cm away at a 12 cm apex (0.31 s flight)
     dive_fwd: float = 1.0                       # scale on a big push's forward/back part (forward reach is capped by
@@ -1247,6 +1249,9 @@ class BounceEnv:
                           3 * self.wind[:, :2], 3 * self.g_env[:, :2],
                           torch.stack([30 * self.exposure, 100 * p["backlash"].mean(1), p["strength"].mean(1)], -1)],
                          -1)
+        if self.cfg.critic_rig:
+            priv = torch.cat([priv, torch.stack([self.strike_k, self.tilt_g, 10 * self.ball_prm["kick"],
+                                                 20 * self.tip_env], -1)], -1)
         return {"policy": policy, "critic": torch.cat([policy, priv], -1)}
 
     @property
@@ -1263,7 +1268,7 @@ class BounceEnv:
 
     @property
     def critic_dim(self):
-        return self.obs_dim + 3 + 3 + 3 + J + J + 11 + 3 * J + 3 + 4 + 3
+        return self.obs_dim + 3 + 3 + 3 + J + J + 11 + 3 * J + 3 + 4 + 3 + (4 if self.cfg.critic_rig else 0)
 
     # ------------------------------------------------------------------ statistics and curriculum
     def _record(self, ids, term, reason):
