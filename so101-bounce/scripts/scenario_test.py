@@ -299,6 +299,8 @@ def main():
     ap.add_argument("--al_alpha", type=float, default=None, help="auto-level EMA weight per detection")
     ap.add_argument("--camera", default="real", choices=["real", "trained"],
                     help="overhead camera at the calibrated real mount and latency, or the env's default nominal")
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=V[,V]",
+                    help="EnvCfg field for every checkpoint, e.g. impact_tip=0.035,0.035 kick_range=0.08,0.08")
     a = ap.parse_args()
     agent, extra = PPO.load(a.checkpoint, a.device, load_optimizer=False)
     trained = {k: tuple(v) if isinstance(v, list) else v for k, v in (extra.get("config") or {}).get("env", {}).items()
@@ -331,6 +333,10 @@ def main():
         cfg["al_alpha"] = a.al_alpha
     if a.camera == "real":
         cfg.update(overhead_cam=REAL_CAM, cam_base_ms=REAL_CAM_BASE_MS)
+    for kv in a.set:                                     # the same world for every checkpoint (e.g. the measured rig)
+        k, v = kv.split("=", 1)
+        vals = tuple(float(x) for x in v.split(","))
+        cfg[k] = vals if "," in v else vals[0]
     p_gain = int(round(float(cfg.get("p_gain", 16.0))))
     if a.launch_name or p_gain in LAUNCH.DEFAULTS:
         cfg["launch_max_action"] = max(1.0, float(getattr(LAUNCH.get(p_gain, a.launch_name), "gain", 1.0)))
