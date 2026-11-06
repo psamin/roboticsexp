@@ -9,7 +9,7 @@ from bounce.robot import ArmKinematics
 import pytest
 
 
-@pytest.mark.parametrize("history,cam_k", [(4, 4), (12, 12)])
+@pytest.mark.parametrize("history,cam_k", [(4, 4), (12, 12), (8, 16)])
 def test_real_obs_matches_simulator(tmp_path, history, cam_k):
     env = BounceEnv(EnvCfg(num_envs=1, device="cpu", seed=4, history=history, cam_k=cam_k))
     env.forced = {"difficulty": 0.7, "rest_start": False}

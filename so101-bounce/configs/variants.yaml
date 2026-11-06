@@ -768,3 +768,36 @@ v29_reach_nodive:
   env:
     <<: *v29env
     dive_p: 0.0
+# Round 18f (2026-11-06): rounds 18d/18e plateaued from ~12-25 min whatever was changed (the critic seeing the hidden
+# settings did not help). The policy saw 4 control steps (80 ms) and 4 detections (~130 ms), shorter than one bounce
+# (0.31 s), so it could not see how its last hit went and had to play one average strategy for every episode's hidden
+# strike push and tilt authority. Now 8 steps and 16 detections (~0.53 s, two bounces); widened from the round-18e
+# checkpoints with scripts/widen_obs.py (old inputs at their new places, zero weights for the older ones).
+v30_reach:
+  train: *v25train
+  ppo: *v25ppo
+  env: &v30env
+    <<: *v29env
+    history: 8
+    cam_k: 16
+v30_reach_wide:
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v30env
+    action_scale: [0.70, 0.55, 0.55, 0.35, 0.30]
+    paddle_box: [0.28, 0.12]
+    max_lateral: 0.30
+    cam_view_half: 0.24
+v30_reach_nodive:
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v30env
+    dive_p: 0.0
+v30_reach_k24:          # 24 detections (~0.8 s)
+  train: *v25train
+  ppo: *v25ppo
+  env:
+    <<: *v30env
+    cam_k: 24
