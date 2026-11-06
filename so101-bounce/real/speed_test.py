@@ -3,11 +3,13 @@ supply voltage, current and load as fast as the bus allows; once with the deriva
 once with D = 0. Ball off. About 30 s of motion.
 
   uv run python real/speed_test.py
+  uv run python real/speed_test.py --pan     # base steps +-10, 20, 30 deg at the bounce pose instead (dive speed)
 
 Reading the summary: if the supply voltage dips well below ~11 V during the strokes, the 12 V supply is current-
 limited (use a bigger one); if current sits at the protection limit, the servos are limiting themselves; if D = 0 is
 much faster, the damping gain is the brake. Log: real/logs/speed-<time>.npz (fitted later by the training agent).
 """
+import argparse
 import json
 import sys
 import time
@@ -42,7 +44,13 @@ def record(b, rows, label, seconds, plan=None, hz=50):
         time.sleep(max(0.0, 0.002 - (time.perf_counter() - now)))   # at most ~500 samples/s
 
 
+PAN_STEPS = (10, 20, 30)                    # deg, each way
+
+
 def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--pan", action="store_true", help="base (shoulder_pan) steps instead of the strokes")
+    args = ap.parse_args()
     kin = ArmKinematics(build_model(), 1)
     scale = np.array(EnvCfg().action_scale)
     hold = json.loads(A.HOLD.read_text())
@@ -54,7 +62,11 @@ def main():
         A.set_registers(b, {"P_Coefficient": P_GAIN, **A.BOUNCE_REGISTERS})
         print(f"to the bounce pose ({A.glide(b, hold, 3.0):.1f} deg)")
         q_ref = rig.deg_to_sim(hold)
-        for d_gain in (32, 0):
+        for amp in PAN_STEPS if args.pan else ():               # step the base out, then back
+            for sgn in (1, -1):
+                plan = [{**hold, "shoulder_pan": hold["shoulder_pan"] + sgn * amp}] * 35 + [hold] * 35
+                record(b, rows, f"pan{sgn * amp:+d}", 1.5, plan)
+        for d_gain in () if args.pan else (32, 0):
             A.set_registers(b, {"D_Coefficient": d_gain})
             for steps in (lp.strike_steps, 6):                     # tuned stroke, then a longer one
                 p = LAUNCH.Launch(**lp.as_dict())
@@ -82,6 +94,18 @@ def main():
     np.savez_compressed(out, label=labels, data=a, columns=np.array(["t"] + A.ARM + ["volt_min", "cur_lift", "cur_elbow", "cur_flex"]))
     q = torch.tensor(np.stack([rig.deg_to_sim(dict(zip(A.ARM, r))) for r in a[:, 1:6]]), dtype=torch.float32)
     pz = ArmKinematics(build_model(), len(q)).forward(q)["paddle_o"][:, 2].numpy()
+    if args.pan:
+        print(f"{'test':10s} {'peak deg/s':>10s} {'to 90 % s':>9s} {'overshoot deg':>13s} {'min volts':>9s}")
+        for lab in dict.fromkeys(labels):
+            m = labels == lab
+            t, pan = a[m, 0] - a[m, 0][0], a[m, 1]
+            amp = float(lab[3:])
+            moved = (pan - pan[0]) * np.sign(amp)
+            t90 = t[np.argmax(moved >= 0.9 * abs(amp))] if (moved >= 0.9 * abs(amp)).any() else float("nan")
+            print(f"{lab:10s} {np.abs(np.gradient(pan, t)).max():10.0f} {t90:9.2f} {moved.max() - abs(amp):13.1f} "
+                  f"{a[m, 6].min() / 10:9.1f}")
+        print(f"log: {out}  ({len(a)} samples)")
+        return
     print(f"{'test':16s} {'paddle up m/s':>13s} {'elbow deg/s':>11s} {'min volts':>9s} {'peak current (lift/elbow/flex)':>31s}")
     for lab in dict.fromkeys(labels):
         m = labels == lab
