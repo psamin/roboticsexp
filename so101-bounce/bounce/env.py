@@ -952,11 +952,12 @@ class BounceEnv:
             if c.strike_push[1]:                         # the face gives toward the tip under a fast upward strike
                 vp = (((oeff - self.oeff_prev) / self.sub_dt) * Reff[..., 2]).sum(-1).clamp(min=0)
                 kick = kick + (self.strike_k * vp)[:, None] * Reff[..., 0]
-            if c.impact_tip[1] or c.dive_p:
+            dive_p = 0.0 if self.forced is not None and self.forced.get("no_dive") else c.dive_p
+            if c.impact_tip[1] or dive_p:
                 vn = (self.v_ball * Reff[..., 2]).sum(-1).abs()
                 kick = kick + (self.tip_env * (1 + self.ball_prm["e0"]) * vn)[:, None] * Reff[..., 0]   # toward the tip
-                if c.dive_p:
-                    big = (self._u(self.N) < c.dive_p).float()
+                if dive_p:
+                    big = (self._u(self.N) < dive_p).float()
                     ang = 2 * math.pi * self._u(self.N)
                     mag = (c.dive_kick[0] + (c.dive_kick[1] - c.dive_kick[0]) * self._u(self.N)) * big
                     kick = kick + torch.stack([c.dive_fwd * mag * torch.cos(ang), mag * torch.sin(ang),

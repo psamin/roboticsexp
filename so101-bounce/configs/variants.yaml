@@ -801,3 +801,35 @@ v30_reach_k24:          # 24 detections (~0.8 s)
   env:
     <<: *v30env
     cam_k: 24
+# Round 18g (2026-11-06): best.pt was kept by the training world's score, which disagreed with the measured rig
+# (v31-reach-nodive scored higher in training but 5.6 % vs 10.1 % in the rig test); now kept by the rig suite
+# (evaluation.py "rig": strike push 0.6, texture 0.07 m/s, tilt authority 0.5, no big pushes; v25-p32-drop 0 % and
+# 3.2 bounces there, as on the arm).
+v32_reach_nodive:
+  train: &v32train
+    eval_suites: [nominal, rig]
+    select_suite: rig
+  ppo: *v25ppo
+  env:
+    <<: *v30env
+    dive_p: 0.0
+v32_reach:
+  train: *v32train
+  ppo: *v25ppo
+  env:
+    <<: *v30env
+v32_reach_wide:
+  train: *v32train
+  ppo: *v25ppo
+  env: &v32wide
+    <<: *v30env
+    action_scale: [0.70, 0.55, 0.55, 0.35, 0.30]
+    paddle_box: [0.28, 0.12]
+    max_lateral: 0.30
+    cam_view_half: 0.24
+v32_reach_wide_nodive:  # near the motor limits, trained on the measured rig without big pushes
+  train: *v32train
+  ppo: *v25ppo
+  env:
+    <<: *v32wide
+    dive_p: 0.0

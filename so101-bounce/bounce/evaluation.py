@@ -13,7 +13,16 @@ SUITES = {
     "off_center": {"difficulty": 1.0, "rest_start": True, "rest_radius": 0.65},   # resting 55-75 % out to the rim
 }
 # opt-in through train.eval_suites (not in the default score)
-EXTRA_SUITES = {"easy": {"difficulty": 0.25, "rest_start": None, "side_cam": False}}
+def _measured_rig(env, ids):
+    """The real arm as measured 2026-11-05: forward push 0.6 x the paddle's upward speed, texture push 0.07 m/s, half
+    the face's tilt reaching the ball, no big pushes (v25-p32-drop gets ~3 bounces per drop here, as on the arm)."""
+    env.strike_k[ids], env.tilt_g[ids], env.tip_env[ids] = 0.6, 0.5, 0.0
+    env.ball_prm["kick"][ids] = 0.07
+
+
+EXTRA_SUITES = {"easy": {"difficulty": 0.25, "rest_start": None, "side_cam": False},
+                "rig": {"difficulty": 0.0, "rest_start": None, "side_cam": False, "post_reset": _measured_rig,
+                        "no_dive": True}}
 
 
 @torch.no_grad()

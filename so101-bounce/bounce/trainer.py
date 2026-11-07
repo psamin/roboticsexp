@@ -52,7 +52,8 @@ class Trainer:
         names = self.config.get("train", {}).get("eval_suites")              # optional subset of SUITES
         res = evaluate(self.env, self.agent.act_deterministic, self.eval_seed,
                        {k: {**SUITES, **EXTRA_SUITES}[k] for k in names} if names else SUITES)
-        s = score(res)
+        sel = self.config.get("train", {}).get("select_suite")                # best.pt by one suite (e.g. rig)
+        s = score({sel: res[sel]} if sel else res)
         row = {"iteration": self.it, "steps": self.steps, "wall_min": self.wall() / 60, "score": s,
                "level": self.env.level, **{f"{k}_{m}": v for k, r in res.items() for m, v in r.items()}}
         self.eval_history.append(row)
