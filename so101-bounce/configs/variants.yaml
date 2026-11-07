@@ -833,3 +833,22 @@ v32_reach_wide_nodive:  # near the motor limits, trained on the measured rig wit
   env:
     <<: *v32wide
     dive_p: 0.0
+# Round 18h (2026-11-06): far dives. The near-motor-limits policy (v32-reach-wide) saves 23-29 % of drops but only
+# 1-9 % of balls landing 12-15 cm beside the paddle; since round 18c beside drops stopped at 15 cm. Sideways dives are
+# reachable (pan: ~10 cm per 0.29 s), more so from higher drops (more flight time): beside drops out to 25 cm, from up
+# to 40 cm, in half the episodes. Still kept by the rig suite, so drops must not get worse.
+v34_wide_far:
+  train: *v32train
+  ppo: *v25ppo
+  env: &v34far
+    <<: *v32wide
+    beside_start_prob: 0.5
+    beside_offset: [0.08, 0.25]
+    beside_full_p: 0.5
+    flight_h: [0.12, 0.40]
+v34_wide_far_nodive:
+  train: *v32train
+  ppo: *v25ppo
+  env:
+    <<: *v34far
+    dive_p: 0.0
