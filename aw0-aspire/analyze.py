@@ -4,7 +4,9 @@ Written before any A1/A2 result existed. Rules:
   (task, protocol, shard, episode) and the code arm's first frame matches the scan's first frame
   (mean abs diff < FRAME_MAD_MAX on 0-255 RGB).
 - WAM runs come in two configurations, told apart by the run name: A1 "wam-bf16-*" (L4: bf16, text encoder on CPU,
-  all tasks; the comparison arm) and A0-ref "wam-fp32-*" (L40/L40S: the released fp32 config, GATE tasks).
+  all tasks; the comparison arm) and A0-ref "wam-fp32-*" (L40/L40S: the released fp32 precision, GATE tasks; its
+  text encoder also runs on CPU, because moving the 7B encoder onto a 44 GB card for each instruction peaks at
+  44.6 GB and OOMs, so the pair differs only in precision).
 - Gate A0 (tasks GATE), decided on A0-ref and also reported for A1: per cell, Fisher exact test of our 50 episodes
   vs the paper's Table 11 rate on 50 rollouts; pass if at most 1 of the 8 cells has p < 0.05 and the pooled
   difference is within +-10 points.
