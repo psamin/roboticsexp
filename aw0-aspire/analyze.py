@@ -167,12 +167,16 @@ def main(root):
         ok = len(cells_) == 2 * len(GATE) and bool(sum(c["p"] < 0.05 for c in cells_) <= 1 and abs(diff) <= 0.10)
         return {"cells": cells_, "pooled_diff": diff, "pass": ok}
 
-    dev = [(a, ref_s[k]) for k, a in wam_s.items() if k in ref_s and k[0] in GATE]   # (bf16, fp32) per seed
-    n10 = sum(1 for a, b in dev if a == 1 and b == 0)
-    n01 = sum(1 for a, b in dev if a == 0 and b == 1)
-    deviation = {"paired": len(dev), "bf16_rate": float(np.mean([a for a, _ in dev])) if dev else None,
-                 "fp32_rate": float(np.mean([b for _, b in dev])) if dev else None, "bf16_only": n10, "fp32_only": n01,
-                 "mcnemar_p": binomtest(n01, n01 + n10).pvalue if n01 + n10 else 1.0}
+    def paired_dev(dev):   # dev: [(bf16, fp32)] per seed
+        n10 = sum(1 for a, b in dev if a == 1 and b == 0)
+        n01 = sum(1 for a, b in dev if a == 0 and b == 1)
+        return {"paired": len(dev), "bf16_rate": float(np.mean([a for a, _ in dev])) if dev else None,
+                "fp32_rate": float(np.mean([b for _, b in dev])) if dev else None, "bf16_only": n10, "fp32_only": n01,
+                "mcnemar_p": binomtest(n01, n01 + n10).pvalue if n01 + n10 else 1.0}
+
+    deviation = paired_dev([(a, ref_s[k]) for k, a in wam_s.items() if k in ref_s and k[0] in GATE])
+    deviation["cells"] = {f"{t}/{p}": paired_dev([(a, ref_s[k]) for k, a in wam_s.items()
+                                                  if k in ref_s and k[:2] == (t, p)]) for t in GATE for p in PROTOS}
 
     pooled = {}
     for p in PROTOS + ("both",):
