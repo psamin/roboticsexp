@@ -1,0 +1,1 @@
+place_cans_plasticbox place_dual_shoes blocks_ranking_rgb open_laptop press_stapler place_shoe place_container_plate pick_dual_bottles
