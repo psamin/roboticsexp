@@ -2,7 +2,8 @@
 # Arm A2: replay each task's shipped ASPIRE-style frozen program (privileged tier) on exactly the scenes the
 # evaluator realizes (seeds.tsv from seed_scan.sbatch). Writes results.tsv
 # (task, protocol, shard, episode, seed, reward, seconds, check_success exceptions) and frame 0 of each trial.
-# usage: SCAN=<seedscan dir> TASKS="a b" sbatch --export=ALL code_eval.sbatch
+# usage: SCAN=<dir with seeds.tsv> TASKS="a b" [PROG_DIR=<dir>/<task>.py programs] [OUT_PREFIX=fixloop-eval] \
+#        sbatch --export=ALL code_eval.sbatch
 #SBATCH -J aa-code-eval
 #SBATCH -p general
 #SBATCH -t 12:00:00
@@ -12,10 +13,11 @@
 source /nethome-instruction/$USER/aw0-aspire/cluster/common.sh
 source /nethome-instruction/$USER/aw0-aspire/cluster/env.sh
 build_sim
-OUT=$RESULTS/code-eval-$SLURM_JOB_ID; mkdir -p "$OUT/logs"
+OUT=$RESULTS/${OUT_PREFIX:-code-eval}-$SLURM_JOB_ID; mkdir -p "$OUT/logs"
 cd "$SIM"; set +u; source env.sh; set -u
 for task in $TASKS; do
   prog=$AWAM/configs/robotwin/tasks_indep/$task/frozen_program.py
+  [ -n "${PROG_DIR:-}" ] && prog=$PROG_DIR/$task.py
   sha256sum "$prog" >> "$OUT/programs.sha256"
   awk -v t="$task" '$1 == t' "$SCAN/seeds.tsv" | while IFS=$'\t' read -r _ proto k ep seed; do
     name=${task}_${proto}_s${k}_ep${ep}; t=$SECONDS
