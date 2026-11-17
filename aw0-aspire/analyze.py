@@ -13,7 +13,9 @@ Written before any A1/A2 result existed. Rules:
 - Deviation check: A1 vs A0-ref paired on the same scenes (exact McNemar pooled over the GATE cells).
 - Comparison: per (task, protocol) exact McNemar on discordant pairs, Holm-corrected; pooled mean of per-task
   differences (code - WAM, equal weight per task as RoboTwin reports) with a stratified paired bootstrap 95% CI.
-usage: analyze.py <results_root> > summary.json   (results_root holds seedscan-*, wam-eval-*, code-eval-*)
+- Arm F (fresh fix-loop program, fixloop-eval-*): paired exact McNemar vs A2 and vs A1 on the same scanned scenes;
+  its locked Stage-2 seeds (shard "L") are reported apart.
+usage: analyze.py <results_root> > summary.json   (holds seedscan-*, wam-eval-*, code-eval-*, fixloop-eval-*)
 """
 import glob
 import json
@@ -67,13 +69,17 @@ def wam_episodes(root, dtype):
     return {(*shard, i): e for shard, eps in best.items() for i, e in enumerate(eps)}
 
 
-def code_episodes(root):
-    out = {}
-    for f in glob.glob(f"{root}/code-eval-*/results.tsv"):
+def code_episodes(root, prefix="code-eval"):
+    """A2 (code-eval-*) or arm F (fixloop-eval-*). Rows with shard "L" are the locked Stage-2 seeds, returned apart."""
+    out, locked = {}, []
+    for f in glob.glob(f"{root}/{prefix}-*/results.tsv"):
         for line in open(f):
             t, p, k, ep, s, rew, _, raised = line.rstrip("\n").split("\t")
+            if k == "L":
+                locked.append((t, p, int(s), rew == "1.000"))
+                continue
             out[(t, p, int(k), int(ep))] = (int(s), rew == "1.000", int(raised), str(Path(f).parent))
-    return out
+    return out, locked
 
 
 def frame_mad(root, key, code_dir, scan_ep=None):
@@ -99,7 +105,9 @@ def holm(ps):
 
 
 def main(root):
-    seeds, wam, ref, code = scan_seeds(root), wam_episodes(root, "bf16"), wam_episodes(root, "fp32"), code_episodes(root)
+    seeds, wam, ref = scan_seeds(root), wam_episodes(root, "bf16"), wam_episodes(root, "fp32")
+    code, _ = code_episodes(root)
+    fresh, fresh_locked = code_episodes(root, "fixloop-eval")
     pairs, dropped = {}, {"no_wam": 0, "no_code": 0, "seed_mismatch": 0, "frame_mismatch": 0, "no_frame": 0}
     mads, ref_mads = [], []
     for key, s in seeds.items():
@@ -176,7 +184,24 @@ def main(root):
                      "wam": float(np.mean([a[:, 0].mean() for a in arrays])),
                      "code": float(np.mean([a[:, 1].mean() for a in arrays]))}
 
-    json.dump({"pairing": {"scanned": len(seeds), "paired": len(pairs), "dropped": dropped,
+    # Arm F: the fresh fix-loop program vs A2 (shipped program) and A1 (WAM) on the same scanned scenes
+    arm_f = {}
+    for p in PROTOS:
+        ks = [k for k in fresh if k[1] == p and k in code and fresh[k][0] == code[k][0] == seeds.get(k)]
+        f_ok = [int(fresh[k][1]) for k in ks]
+        vs = {}
+        for name, other in (("shipped_program", {k: int(code[k][1]) for k in ks}),
+                            ("wam_bf16", {k: wam[k][1] for k in ks if k in wam and wam[k][0] == seeds[k]})):
+            kk = list(other)
+            n01 = sum(1 for k in kk if other[k] == 0 and fresh[k][1])
+            n10 = sum(1 for k in kk if other[k] == 1 and not fresh[k][1])
+            vs[name] = {"paired": len(kk), "other_rate": float(np.mean([other[k] for k in kk])) if kk else None,
+                        "fresh_only": n01, "other_only": n10,
+                        "mcnemar_p": binomtest(n01, n01 + n10).pvalue if n01 + n10 else 1.0}
+        arm_f[p] = {"n": len(ks), "rate": float(np.mean(f_ok)) if ks else None, "vs": vs}
+    arm_f["locked_stage2"] = {"success": sum(r for *_, r in fresh_locked), "n": len(fresh_locked)}
+
+    json.dump({"arm_f_fresh_fixloop": arm_f, "pairing": {"scanned": len(seeds), "paired": len(pairs), "dropped": dropped,
                            "frame_mad_median": float(np.median(mads)) if mads else None,
                            "frame_mad_max": float(np.max(mads)) if mads else None,
                            "frame_mad_other_scene_min": float(np.min(ref_mads)) if ref_mads else None,
