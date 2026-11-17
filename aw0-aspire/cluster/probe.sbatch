@@ -15,25 +15,30 @@ for t in conda micromamba nvcc gcc g++ ffmpeg vulkaninfo; do printf '%s: %s\n' "
 vulkan_check
 
 "$UV" venv -q --python 3.10 "$WORK/venv"
-VIRTUAL_ENV=$WORK/venv "$UV" pip install -q sapien==3.0.0b1 numpy==1.26.4 mujoco==3.3.0
+VIRTUAL_ENV=$WORK/venv "$UV" pip install -q setuptools==69.5.1 sapien==3.0.0b1 numpy==1.26.4 mujoco==3.3.0
 PY=$WORK/venv/bin/python
 
 echo "== sapien render"
 $PY - <<'PY' && echo "SAPIEN: PASS" || echo "SAPIEN: FAIL"
-import sapien, numpy as np
+import math, sapien, numpy as np
+print("device", getattr(sapien.render, "get_device_summary", lambda: "n/a")())
 scene = sapien.Scene()
-scene.set_ambient_light([0.5, 0.5, 0.5])
-scene.add_directional_light([0, 1, -1], [0.5, 0.5, 0.5])
+scene.set_ambient_light([0.3, 0.3, 0.3])
+scene.add_directional_light([0, 1, -1], [0.7, 0.7, 0.7])
+scene.add_ground(0)
 b = scene.create_actor_builder()
-b.add_box_visual(half_size=[0.1, 0.1, 0.1])
-b.add_box_collision(half_size=[0.1, 0.1, 0.1])
-b.build(name="box")
+b.add_box_visual(half_size=[0.1, 0.1, 0.1], material=[1.0, 0.0, 0.0])
+box = b.build_kinematic(name="box")
+box.set_pose(sapien.Pose([0, 0, 0.1]))
+th = math.atan2(0.5, 1.0)                                   # camera +x forward; pitch down at the box
 cam = scene.add_camera("cam", 320, 240, 1.0, 0.01, 10.0)
-cam.set_pose(sapien.Pose([-1.0, 0.0, 0.0]))
-scene.step(); scene.update_render(); cam.take_picture()
-rgb = cam.get_picture("Color")[..., :3]
-print("shape", rgb.shape, "mean", float(rgb.mean()), "std", float(rgb.std()))
-assert rgb.std() > 0, "blank frame"
+cam.entity.set_pose(sapien.Pose([-1.0, 0, 0.6], [math.cos(th / 2), 0, math.sin(th / 2), 0]))
+def shot():
+    scene.update_render(); cam.take_picture(); return cam.get_picture("Color")[..., :3]
+a = shot(); box.set_pose(sapien.Pose([0, 0, -5])); c = shot()
+print("std", float(a.std()), "red-ish px", int(((a[..., 0] > 0.4) & (a[..., 1] < 0.2)).sum()),
+      "box diff", float(np.abs(a - c).mean()))
+assert a.std() > 0.01 and np.abs(a - c).mean() > 1e-3, "blank or box not rendered"
 PY
 
 echo "== mujoco egl render"
