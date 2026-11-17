@@ -17,6 +17,8 @@ OUT=$RESULTS/wam-eval-$SLURM_JOB_ID; mkdir -p "$OUT"
 nvidia-smi --query-gpu=timestamp,memory.used --format=csv,noheader -l 30 > "$OUT/gpu_mem.csv" &
 cd "$AWAM"
 name=wam-$DTYPE-$SLURM_JOB_ID
+# Moving the 7B text encoder on and off the GPU per instruction fragments the cache (fp32 OOM after 5 episodes on 44 GB)
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 AGENTICWAM_DEPLOY_DTYPE=$DTYPE AGENTICWAM_TEXT_OFFLOAD=1 $PY scripts/eval_robotwin_release.py wam \
     --tasks "$(echo $TASKS | tr ' ' ',')" --episodes "$EPS" --shards "$SHARDS" --gpus 0 --name "$name" \
     || echo "WAM_EVAL exited $?"
