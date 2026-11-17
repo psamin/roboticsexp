@@ -4,7 +4,7 @@
 AWAM_COMMIT=275818e5787d59012eba4c43504342f1201ad25b      # ZhuoyangLiu2005/agentic-wam
 ROBOTWIN_COMMIT=bf44be51cf5717a5595ce59447f2cf5263d2aa95  # pinned by awam codegen/sim/scripts/setup_external.sh
 CUROBO_REF=v0.7.8
-PYTORCH3D_REF=v0.7.8
+PYTORCH3D_REF=75ebeeaea0908c5527e7b1e305fbc7681382db47   # tag V0.7.8 (capital V; awam setup_external.sh pins a nonexistent v0.7.8)
 TORCH_SPEC="torch==2.7.1+cu128 torchvision==0.22.1+cu128"
 WHEELS=$HOME_DIR/aw0-aspire-cache/wheels-torch2.7.1-cu128-sm89
 AWAM=$WORK/awam
