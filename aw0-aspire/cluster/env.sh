@@ -12,6 +12,7 @@ SIM=$AWAM/codegen/sim
 ROBOTWIN=$SIM/capsim/third_party/RoboTwin
 CKPT=$AWAM/checkpoints
 PY=$WORK/venv/bin/python
+export PATH=$WORK/venv/bin:$PATH   # ninja for torch extension builds; `python` for scripts that shell out
 export MAMBA_ROOT_PREFIX=$WORK/mamba TORCH_CUDA_ARCH_LIST="8.9" MAX_JOBS=${SLURM_CPUS_PER_TASK:-8}
 
 t0=$SECONDS
@@ -46,6 +47,7 @@ py_env() {
   VIRTUAL_ENV=$WORK/venv "$UV" pip install -q sapien==3.0.0b1 mplib==0.2.1 numpy==1.26.4 opencv-python==4.10.0.84 \
       transforms3d==0.4.2 scipy==1.10.1 gymnasium==0.29.1 trimesh==4.4.3 open3d==0.18.0 "zarr<3" h5py "pyglet<2" \
       "moviepy<2" av tyro==1.0.6 pydantic fastapi uvicorn cloudpickle scikit-learn warp-lang==1.12.0 pyyaml \
+      viser openai termcolor matplotlib requests \
       --extra-index-url https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match
 }
 
@@ -98,4 +100,10 @@ print({k: cfg[k] for k in ("wan_vae", "text_encoder", "code_model", "code_vision
 PY
 }
 
-build_all() { cuda_toolkit; sources; py_env; extensions; robotwin_assets; weights; site_config; step "env ready"; }
+sim_config() {   # codegen/sim site.yaml (robotwin_py, robotwin_root) for the code-as-policy harness
+  step "codegen/sim config"
+  (cd "$SIM" && SETUP_PYTHON=$PY bash scripts/setup_external.sh configure)
+}
+
+build_sim() { cuda_toolkit; sources; py_env; extensions; robotwin_assets; sim_config; step "sim env ready"; }
+build_all() { build_sim; weights; site_config; step "env ready"; }
