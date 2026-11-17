@@ -97,7 +97,9 @@ weights() {   # the release into checkpoints/; public components into the HF cac
 
 site_config() {   # configs/robotwin/site.yaml and configs/paths/default.yaml for this scratch layout
   step "site config"
-  local vk=/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json
+  local vk; vk=$(ls /usr/share/vulkan/icd.d/nvidia_icd*.json /etc/vulkan/icd.d/nvidia_icd*.json 2>/dev/null | head -1 || true)
+  if [ -z "$vk" ]; then vulkan_check; vk=${VK_ICD_FILENAMES:?no NVIDIA Vulkan ICD on $(hostname)}; fi   # node-specific
+  echo "vulkan icd: $vk"
   sed -e "s#^python_bin: .*#python_bin: $WORK/venv/bin#" -e "s#^vulkan_icd: .*#vulkan_icd: $vk#" \
       -e "s#^hf_cache_policy: .*#hf_cache_policy: $HF_HOME#" -e "s#^hf_cache_vision: .*#hf_cache_vision: $HF_HOME#" \
       -e "s#^code_model: .*#code_model: $SDAR#" \
