@@ -1,0 +1,221 @@
+<title>AW-0 vs ASPIRE Results</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one reading column, same system as the plan page; each chart sits on a panel that scrolls sideways on phones. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --fg: #1b1f27; --muted: #5b6372; --line: #dde1e8;
+  --accent: #2f5fd0; --ok: #1f7a4d; --warn: #a15c00; --bad: #b3261e; --chip: #eef1f6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --display: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151b; --panel: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d;
+  --accent: #7ea2ff; --ok: #5cc98f; --warn: #e3a54a; --bad: #ff8a80; --chip: #232934;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d;
+  --accent: #7ea2ff; --ok: #5cc98f; --warn: #e3a54a; --bad: #ff8a80; --chip: #232934;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--body); }
+main { max-width: 860px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 30px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; line-height: 1.2; }
+h2 { font-size: 20px; }
+h3 { font-size: 15px; font-family: var(--body); font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.lede { color: var(--muted); }
+.answer { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); white-space: nowrap; }
+code { font-family: var(--mono); font-size: 13px; background: var(--chip); padding: 1px 4px; border-radius: 3px; }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--chip); white-space: nowrap; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+ul, ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 70ch; }
+.small { font-size: 13px; color: var(--muted); }
+a { color: var(--accent); }
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.status > div { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.chart { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 12px 6px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.chart h3 { margin-bottom: 4px; }
+.grid { stroke: var(--line); stroke-width: 1; }
+.zero { stroke: var(--muted); stroke-width: 1.5; }
+.tick { fill: var(--muted); font: 11px var(--mono); }
+.lab { fill: var(--fg); font: 12.5px var(--body); }
+.val { fill: var(--fg); font: 12px var(--mono); }
+.ref { stroke: var(--fg); stroke-width: 2; opacity: .5; }
+.whisk { stroke-width: 2; stroke-linecap: round; }
+.dot { stroke: var(--panel); stroke-width: 2; }
+.hit { fill: transparent; }
+.mark { cursor: default; outline: none; }
+.mark:hover .dot, .mark:focus-visible .dot { stroke: var(--fg); }
+.mark:hover .bar, .mark:focus-visible .bar { opacity: .8; }
+.ref:focus-visible { opacity: 1; outline: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+#tip { position: fixed; z-index: 20; pointer-events: none; max-width: 320px; background: var(--fg); color: var(--bg);
+  font: 12.5px/1.45 var(--body); padding: 6px 9px; border-radius: 5px; }
+</style>
+
+<main>
+<header style="display:flex;flex-direction:column;gap:8px">
+  <h1>AW-0 vs ASPIRE on RoboTwin</h1>
+  <p class="lede">Results, Nov 17 2026. Eight RoboTwin 2.0 tasks, 50 clean and 50 randomized scenes each. Every arm ran on the same 800 scenes and was compared scene by scene. Companion to the plan page.</p>
+</header>
+
+<section class="answer">
+  <p><strong>On clean scenes the two approaches tie. On randomized scenes the programs win by 70 points, but that gap mostly measures privileged state against pixels.</strong></p>
+  <p>The ASPIRE-style programs that AW-0 ships succeed on 91% of clean scenes, against 88% for AW-0's world action model (WAM). The difference is +2.7 points, 95% CI −1.5 to +7.0. On randomized scenes it is 92% against 21%. Those programs read object poses straight from the simulator, so clutter, textures and lighting never reach them, while the WAM works from camera images.</p>
+  <p>The closer test of the frameworks is a program written fresh by an ASPIRE fix loop that only sees the camera. On blocks_ranking_rgb it succeeded on 50/50 clean, 49/50 randomized and 15/15 locked scenes. The WAM managed 96% and 22% on that task. That is one colour-based task and one authoring run, so it is a lead, not a conclusion.</p>
+</section>
+
+<section>
+  <h2>Where things stand</h2>
+  <div class="status">
+    <div><span class="chip ok">Shown</span>
+      <p>Our WAM reproduces the paper. The released fp32 model matches Table 11 on all 8 gate cells, and bf16 matches too.</p>
+      <p>Clean scenes: programs and WAM tie overall. Randomized: programs win on all 8 tasks.</p></div>
+    <div><span class="chip warn">Suggestive</span>
+      <p>A camera-only program from a fresh ASPIRE loop beat both the WAM and the shipped privileged program on one task, for $1.49 of Sonnet 5.5 tokens.</p></div>
+    <div><span class="chip bad">Open</span>
+      <p>Shipped programs with camera perception instead of simulator poses. This needs SAM3 weights, which are gated.</p>
+      <p>AW-0's hybrid model. The fresh loop on more than one task.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>What was compared</h2>
+  <div class="wrap"><table>
+    <tr><th>Arm</th><th>What it is</th><th>Sees at test time</th><th>Tasks</th></tr>
+    <tr><td>A1 · WAM bf16</td><td>AW-0's released <code>wam.pt</code>: Cosmos-Predict2.5-2B video model with a diffusion action head</td><td>Cameras and the instruction</td><td>8</td></tr>
+    <tr><td>A0 · WAM fp32</td><td>Same model at its released precision, used to check our setup against the paper and to check bf16</td><td>Cameras and the instruction</td><td>4 (gate)</td></tr>
+    <tr><td>A2 · Shipped program</td><td><code>frozen_program.py</code> from the AW-0 repo. Written by Claude Opus 4.8 following ASPIRE's fix loop, per the AW-0 paper</td><td>Object poses from the simulator (privileged tier)</td><td>8</td></tr>
+    <tr><td>F · Fresh fix loop</td><td>New program written here by a Sonnet 5.5 subagent running ASPIRE's loop: write, run trials, read failures, fix. 4 rounds on 10 debug seeds</td><td>Head RGB-D camera only; audited for privileged reads</td><td>1</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>How it was kept controlled</h2>
+  <ul>
+    <li><strong>Same scenes.</strong> A scan of RoboTwin's own evaluation seed stream fixed 100 scenes per task. Every arm ran on those seeds, and results are paired by task, setting and seed, with a check that the first camera frames match.</li>
+    <li><strong>Gate before comparison.</strong> Before any WAM-vs-program comparison counted, our WAM had to match the paper: at most 1 of 8 cells at p &lt; 0.05 against Table 11, and the pooled difference within ±10 points.</li>
+    <li><strong>Paired statistics.</strong> Exact McNemar test per cell with Holm correction across the 16 cells. Pooled differences use a paired bootstrap stratified by cell.</li>
+    <li><strong>Held-out seeds for F.</strong> The fix loop saw only 10 debug seeds. It was scored on the 100 scanned scenes plus 15 locked seeds nobody looked at during development.</li>
+    <li><strong>Tasks fixed in advance.</strong> The 8 tasks were drawn with a fixed seed from tasks without pinned objects, before any results existed.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>1 · Our WAM reproduces the paper</h2>
+  <p>The released fp32 WAM is within the paper's numbers on all 8 gate cells. No cell differs at p &lt; 0.05, and the pooled difference is −3.5 points. bf16 also passes, with a pooled difference of −0.3 points. So the comparisons below use a working WAM, not a broken setup.</p>
+  <div class="chart"><h3>WAM fp32 success vs AW-0 paper, Table 11</h3>{{gate_chart}}</div>
+  {{legend_gate}}
+  {{gate_table}}
+</section>
+
+<section>
+  <h2>2 · Programs vs WAM, task by task</h2>
+  <p>Clean scenes: the two are close on 7 of 8 tasks. Only pick_dual_bottles is a significant win for the program (100% vs 80%, Holm p = 0.016). On place_dual_shoes the WAM does better (72% vs 52%), but not significantly.</p>
+  <p>Randomized scenes: the program wins on every task, with Holm p ≤ 0.002 in every cell. The WAM drops to 12–38%, in line with the paper's 8–38%.</p>
+  <div class="chart"><h3>Clean scenes</h3>{{per_task_clean}}</div>
+  <div class="chart"><h3>Randomized scenes</h3>{{per_task_randomized}}</div>
+  {{legend_arms}}
+  <p class="small">Dots are success rates over 50 scenes; whiskers are Wilson 95% intervals; grey ticks are the AW-0 paper's WAM numbers. Hover or focus a mark for counts.</p>
+</section>
+
+<section>
+  <h2>3 · Pooled difference, program minus WAM</h2>
+  <p>Averaged over the 8 tasks, paired scene by scene: +2.7 points clean (CI includes zero), +70.3 points randomized, +36.5 points overall.</p>
+  <div class="chart"><h3>Program minus WAM, percentage points</h3>{{forest}}</div>
+</section>
+
+<section>
+  <h2>4 · The fresh fix loop on one task</h2>
+  <p>On blocks_ranking_rgb, the fresh camera-only program succeeded on 50/50 clean and 49/50 randomized scenes, plus 15/15 locked seeds.</p>
+  <ul>
+    <li><strong>Against the shipped privileged program</strong> (90% and 92%): better, but not significantly (5 vs 0 discordant scenes clean, p = 0.06; 4 vs 1 randomized, p = 0.38).</li>
+    <li><strong>Against the WAM on randomized scenes:</strong> 36 vs 0 discordant scenes.</li>
+  </ul>
+  <div class="chart"><h3>blocks_ranking_rgb, three arms</h3>{{f_chart}}</div>
+  {{legend_f}}
+</section>
+
+<section>
+  <h2>5 · bf16 is a fair stand-in for fp32</h2>
+  <p>On 375 seeds run at both precisions, bf16 succeeds on 54% and fp32 on 51% (32 vs 21 discordant, p = 0.17). The largest gap is place_dual_shoes on clean scenes, 67% vs 46% (p = 0.08 before correction). That is also the one cell where bf16 ran on an L4 and fp32 on an L40, so precision and GPU are confounded there.</p>
+  <div class="chart"><h3>Same seeds, two precisions</h3>{{dev_chart}}</div>
+  {{legend_dev}}
+  {{dev_table}}
+</section>
+
+<section>
+  <h2>6 · Token cost</h2>
+  <p>All LLM work ran inside this Claude Code session as subagents, so there were no API calls. API-equivalent cost was about $50.8 over 165M tokens, mostly cached context reads. The fresh fix loop itself cost $1.49. ASPIRE's paper reports about $12 per task for Sonnet 5.5 on its own benchmarks. The harnesses and tasks differ, so the two figures are not directly comparable.</p>
+  <div class="chart"><h3>API-equivalent cost by part</h3>{{cost_chart}}</div>
+</section>
+
+<section>
+  <h2>What this does not show</h2>
+  <ul>
+    <li><strong>It is not a same-inputs framework comparison.</strong> The shipped programs read simulator state, while the WAM sees pixels. Most of the randomized gap comes from that difference.</li>
+    <li><strong>The programs are the AW-0 team's, not ASPIRE's own run.</strong> ASPIRE's released code targets LIBERO-Pro, Robosuite and BEHAVIOR-1K, with no RoboTwin harness. The shipped programs are AW-0's Opus 4.8 outputs of an ASPIRE-style loop.</li>
+    <li><strong>F is one task and one authoring run.</strong> blocks_ranking_rgb suits colour thresholds. Two constants encode task knowledge: block-size bounds fit to this task's blocks, and row spacing clamped to 9–12 cm, inside the checker's 13 cm tolerance.</li>
+    <li><strong>AW-0's hybrid model was not run.</strong> Its privileged variant is off-protocol, and its camera variant needs SAM3.</li>
+    <li><strong>Deviations from the release, each checked:</strong> A1 runs bf16 (section 5). The 7B text encoder runs on CPU, with embeddings at cosine ≥ 0.997 to GPU. The CUDA allocator uses expandable segments.</li>
+    <li><strong>Mixed GPUs.</strong> Most cells ran on L40 or L40S. Clean cans and dual_shoes ran on an L4. Their randomized shards were rerun on L40S and L40 after the 23 GB L4 ran out of render memory mid-shard.</li>
+    <li><strong>Pairing losses.</strong> RoboTwin's expert check is not deterministic on some tasks, so 88 WAM episodes landed on a different seed than the scan at the same position. Pairing by seed recovers all but 24 scenes. Two more were dropped because the first frames differ: same objects, different random lighting. 774 of 800 pairs remain. The frame check cannot tell every pair of different scenes apart (closest different-scene distance 1.8 vs a same-scene median of 2.0), so seed equality is the primary match.</li>
+    <li><strong>Precision per cell.</strong> 50 scenes per cell gives intervals of roughly ±10–14 points.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Decisions for you</h2>
+  <div class="wrap"><table>
+    <tr><th>Option</th><th>What it answers</th><th>Cost</th><th>Call</th></tr>
+    <tr><td>Request SAM3 access on Hugging Face, then run the shipped programs and AW-0's hybrid with camera perception</td><td>The same-inputs comparison your question asks for</td><td>No tokens; about a day of one L40 for 8 tasks × 2 arms</td><td><span class="chip ok">Recommended</span></td></tr>
+    <tr><td>Run the fresh fix loop on 3 more tasks, including place_dual_shoes, where the shipped program is weakest (52%)</td><td>Whether one task's result generalizes</td><td>About $2–6 of Sonnet tokens per task, plus about 1 GPU-hour each</td><td><span class="chip ok">Recommended, can run now</span></td></tr>
+    <tr><td>Stop here</td><td>Claims stand as written above</td><td>Nothing</td><td><span class="chip">Fallback</span></td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>All cells</h2>
+  {{table}}
+  <p class="small">Paired = scenes with both arms on the same seed. WAM only / program only = discordant scenes. Code: <code>aw0-aspire/</code> in roboticsexp (<code>analyze.py</code>, <code>report.py</code>, <code>cluster/</code>, <code>fixloop/</code>). Raw logs: <code>~/aw0-aspire-results</code> on Futurama.</p>
+</section>
+</main>
+<div id="tip" hidden></div>
+<script>
+(() => {
+  const tip = document.getElementById("tip");
+  const show = (el, x, y) => {
+    tip.textContent = el.getAttribute("data-tip"); tip.hidden = false;
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.max(8, Math.min(x + 12, innerWidth - r.width - 8)) + "px";
+    tip.style.top = Math.max(8, y - r.height - 10) + "px";
+  };
+  document.addEventListener("pointermove", e => {
+    const el = e.target.closest && e.target.closest("[data-tip]");
+    if (el) show(el, e.clientX, e.clientY); else tip.hidden = true;
+  });
+  document.addEventListener("focusin", e => {
+    const el = e.target.closest && e.target.closest("[data-tip]");
+    if (!el) return;
+    const b = el.getBoundingClientRect(); show(el, b.left + b.width / 2, b.top);
+  });
+  document.addEventListener("focusout", () => { tip.hidden = true; });
+  addEventListener("scroll", () => { tip.hidden = true; }, { passive: true });
+})();
+</script>

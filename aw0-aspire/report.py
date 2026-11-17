@@ -10,7 +10,7 @@ S = json.load(open(sys.argv[1]))
 COST = json.load(open(sys.argv[2]))
 TASKS = [c.split("/")[0] for c in S["cells"]][::2]
 PROTOS = ("clean", "randomized")
-COL = {"wam": "var(--s1)", "code": "var(--s2)", "fresh": "var(--s3)", "fp32": "var(--s1d)"}
+COL = {"wam": "var(--s1)", "code": "var(--s2)", "fresh": "var(--s3)", "fp32": "var(--s4)"}
 
 
 def wilson(p, n):
@@ -83,6 +83,22 @@ grows = [(f'{g["cell"].split("/")[0].replace("_", " ")} · {g["cell"].split("/")
           {"fp32": (g["ours"], g["n"])}, g["paper"]) for g in S["gate_released_fp32"]["cells"]]
 gate_chart = dot_chart(grows, ["fp32"], "Gate: our fp32 WAM vs the paper", "AW-0 paper")
 
+# 2b. precision check: bf16 vs fp32 WAM on the same seeds
+D = S["deviation_bf16_vs_fp32"]["cells"]
+drows = [(f'{k.split("/")[0].replace("_", " ")} · {k.split("/")[1][:5]}',
+          {"wam": (d["bf16_rate"], d["paired"]), "fp32": (d["fp32_rate"], d["paired"])}, None) for k, d in D.items()]
+dev_chart = dot_chart(drows, ["wam", "fp32"], "WAM bf16 vs fp32 on the same seeds")
+
+
+def dev_table():
+    rows = "".join(f'<tr><td>{k}</td><td class="num">{d["paired"]}</td><td class="num">{pct(d["bf16_rate"])}</td>'
+                   f'<td class="num">{pct(d["fp32_rate"])}</td><td class="num">{d["bf16_only"]}</td>'
+                   f'<td class="num">{d["fp32_only"]}</td><td class="num">{d["mcnemar_p"]:.2f}</td></tr>'
+                   for k, d in D.items())
+    return (f'<div class="wrap"><table><tr><th>Cell</th><th>Paired seeds</th><th>bf16</th><th>fp32</th>'
+            f'<th>bf16 only</th><th>fp32 only</th><th>McNemar p</th></tr>{rows}</table></div>')
+
+
 # 3. pooled difference forest plot (code - WAM)
 P = S["pooled"]
 
@@ -124,7 +140,7 @@ f_chart = dot_chart(frows, ["wam", "code", "fresh"], "blocks ranking rgb, three 
 
 def cost_bars():
     items = COST["items"]
-    W, L, R, T, rh = 640, 230, 70, 10, 30
+    W, L, R, T, rh = 640, 300, 70, 10, 30
     H = T + rh * len(items) + 24
     mx = max(i["usd"] for i in items)
     x = lambda v: L + v / mx * (W - L - R)
@@ -167,7 +183,8 @@ frag = {"per_task_clean": per_task["clean"], "per_task_randomized": per_task["ra
         "legend_arms": legend(["wam", "code"], "AW-0 paper, WAM"), "gate_chart": gate_chart,
         "legend_gate": legend(["fp32"], "AW-0 paper"), "forest": forest(), "f_chart": f_chart,
         "legend_f": legend(["wam", "code", "fresh"], "AW-0 paper, WAM"), "cost_chart": cost_bars(),
-        "table": table(), "gate_table": gate_table()}
+        "table": table(), "gate_table": gate_table(), "dev_chart": dev_chart,
+        "legend_dev": legend(["wam", "fp32"]), "dev_table": dev_table()}
 page = open(sys.argv[3]).read()
 for k, v in frag.items():
     page = page.replace("{{" + k + "}}", v)
