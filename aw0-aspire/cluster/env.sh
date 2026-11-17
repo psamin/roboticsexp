@@ -74,11 +74,13 @@ robotwin_assets() {
 weights() {   # the release into checkpoints/; public components into the HF cache the launcher reads offline
   step "weights"
   local hf=$WORK/venv/bin/hf
-  $hf download -q miniFranka/agentic-wam-posttrain-robotwin-suit --local-dir "$CKPT/robotwin_release" >/dev/null
-  SDAR=$($hf download -q JetLM/SDAR-1.7B-Chat)
-  QWEN=$($hf download -q Qwen/Qwen3-VL-2B-Instruct)
-  COSMOS=$($hf download -q nvidia/Cosmos-Reason1-7B)
-  WAN=$($hf download -q Wan-AI/Wan2.2-TI2V-5B Wan2.2_VAE.pth)
+  export HF_HUB_DISABLE_PROGRESS_BARS=1    # `hf download` prints the local path as its last stdout line
+  $hf download miniFranka/agentic-wam-posttrain-robotwin-suit --local-dir "$CKPT/robotwin_release" >/dev/null
+  SDAR=$($hf download JetLM/SDAR-1.7B-Chat | tail -1)
+  QWEN=$($hf download Qwen/Qwen3-VL-2B-Instruct | tail -1)
+  COSMOS=$($hf download nvidia/Cosmos-Reason1-7B | tail -1)
+  WAN=$($hf download Wan-AI/Wan2.2-TI2V-5B Wan2.2_VAE.pth | tail -1)
+  for d in "$SDAR" "$QWEN" "$COSMOS" "$WAN"; do [ -e "$d" ] || { echo "weights: no such path '$d'" >&2; exit 1; }; done
   du -sh "$CKPT/robotwin_release" "$HF_HOME"
 }
 
