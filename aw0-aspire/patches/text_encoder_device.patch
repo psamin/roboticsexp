@@ -1,0 +1,22 @@
+diff --git a/robotwin/deploy/deploy_policy.py b/robotwin/deploy/deploy_policy.py
+index dc67558..51157d7 100644
+--- a/robotwin/deploy/deploy_policy.py
++++ b/robotwin/deploy/deploy_policy.py
+@@ -181,6 +181,8 @@ class _CosmosTextEncoder:
+ 
+     def __init__(self, ckpt_dir: str, device: str, max_len: int = 128, dtype=torch.bfloat16):
+         from transformers import Qwen2_5_VLForConditionalGeneration, AutoConfig, AutoProcessor
++        self.out_device = device
++        device = os.environ.get("AW0_TEXT_DEVICE", device)   # placement only: run the 7B encoder off a 24 GB GPU
+         from accelerate import init_empty_weights
+         sd, src = _text_encoder_state(ckpt_dir)
+         cfg = AutoConfig.from_pretrained(src)
+@@ -254,7 +256,7 @@ class _CosmosTextEncoder:
+         ids = ids[:self.max_len].unsqueeze(0)
+         hs = self.qwen(ids, output_hidden_states=True).hidden_states
+         emb = torch.cat([(h - h.mean(-1, keepdim=True)) / (h.std(-1, keepdim=True) + 1e-8)
+-                         for h in hs[1:]], dim=-1).detach()          # [1,L,100352]
++                         for h in hs[1:]], dim=-1).detach().to(self.out_device)          # [1,L,100352]
+         self._cache[prompt] = emb
+         if self.offload:
+             self.qwen.to("cpu")

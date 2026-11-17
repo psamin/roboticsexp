@@ -25,7 +25,7 @@ replay() {   # name task seed config program
   local t=$SECONDS
   $PY iterate/scripts/replay_trial.py --code "$5" --task "$2" --seed "$3" \
       --config "iterate/configs/$4.yaml" --output-dir "$OUT/replay/$1" > "$OUT/$1.log" 2>&1 || echo "replay $1 exited $?"
-  local trial; trial=$(find "$OUT/replay/$1" -maxdepth 3 -type d -name 'trial_*' 2>/dev/null | head -1 || true)
+  local trial; trial=$(find "$OUT/replay/oracle/$1" -maxdepth 1 -type d -name 'trial_*' 2>/dev/null | head -1 || true)
   echo "CODE $1: $(basename "${trial:-none}") | $((SECONDS - t)) s | check_success raised: $(grep -c 'check_success() raised' "$OUT/$1.log")"
 }
 replay setup_only   stack_blocks_two 101 priv_clean      "$OUT/programs/setup_only.py"

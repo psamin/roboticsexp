@@ -9,7 +9,7 @@
 #SBATCH -o /nethome-instruction/pi34/aw0-aspire-results/smoke-wam-%j.txt
 source /nethome-instruction/$USER/aw0-aspire/cluster/common.sh
 source /nethome-instruction/$USER/aw0-aspire/cluster/env.sh
-echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"; nvidia-smi -L
+echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset} AW0_TEXT_DEVICE=${AW0_TEXT_DEVICE:-unset}"; nvidia-smi -L
 build_all
 
 OUT=$RESULTS/smoke-wam-$SLURM_JOB_ID; mkdir -p "$OUT"

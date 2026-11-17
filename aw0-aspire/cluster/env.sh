@@ -34,6 +34,7 @@ sources() {
   git clone -q https://github.com/ZhuoyangLiu2005/agentic-wam.git "$AWAM" && git -C "$AWAM" checkout -q "$AWAM_COMMIT"
   git clone -q https://github.com/RoboTwin-Platform/RoboTwin.git "$ROBOTWIN" && git -C "$ROBOTWIN" checkout -q "$ROBOTWIN_COMMIT"
   git clone -q --depth 1 --branch "$CUROBO_REF" https://github.com/NVlabs/curobo.git "$ROBOTWIN/envs/curobo"
+  git -C "$AWAM" apply "$HOME_DIR/aw0-aspire/patches/text_encoder_device.patch"   # opt-in via AW0_TEXT_DEVICE
 }
 
 py_env() {
