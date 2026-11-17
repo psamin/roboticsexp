@@ -60,7 +60,17 @@ extensions() {   # cuRobo and PyTorch3D compiled once against this torch, wheels
       FORCE_CUDA=1 $PY -m pip wheel -q --no-build-isolation --no-deps -w "$WHEELS" \
           "git+https://github.com/facebookresearch/pytorch3d.git@$PYTORCH3D_REF"
   ls -la "$WHEELS"
-  VIRTUAL_ENV=$WORK/venv "$UV" pip install -q --no-deps "$WHEELS"/*.whl
+  VIRTUAL_ENV=$WORK/venv "$UV" pip install -q "$WHEELS"/*.whl numpy==1.26.4 $TORCH_SPEC \
+      --extra-index-url https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match
+}
+
+import_check() {   # RoboTwin hides a failed cuRobo import behind try/except; import it directly so it fails here
+  step "import check"
+  (cd "$ROBOTWIN" && $PY -c "
+import torch, sapien, mplib, pytorch3d.ops, curobo.wrap.reacher.motion_gen
+from envs.robot.planner import CuroboPlanner
+print('imports ok: torch', torch.__version__, 'cuda', torch.cuda.is_available())")
+  VIRTUAL_ENV=$WORK/venv "$UV" pip check || echo "pip check reported conflicts (above)"
 }
 
 robotwin_assets() {
@@ -107,5 +117,5 @@ sim_config() {   # codegen/sim site.yaml (robotwin_py, robotwin_root) for the co
   (cd "$SIM" && SETUP_PYTHON=$PY bash scripts/setup_external.sh configure)
 }
 
-build_sim() { cuda_toolkit; sources; py_env; extensions; robotwin_assets; sim_config; step "sim env ready"; }
+build_sim() { cuda_toolkit; sources; py_env; extensions; robotwin_assets; sim_config; import_check; step "sim env ready"; }
 build_all() { build_sim; weights; site_config; step "env ready"; }
