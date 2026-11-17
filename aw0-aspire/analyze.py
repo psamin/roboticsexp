@@ -1,8 +1,10 @@
 """Paired analysis of AW-0 WAM (A1) vs the ASPIRE-style frozen programs (A2) on identical RoboTwin scenes.
 Written before any A1/A2 result existed. Rules:
-- Pairing: an episode pair counts only if the WAM shard's realized seed equals the seed scan's seed for that
-  (task, protocol, shard, episode) and the code arm's first frame matches the scan's first frame
-  (mean abs diff < FRAME_MAD_MAX on 0-255 RGB).
+- Pairing: by (task, protocol, seed). The code arm replays the scan's seeds; a WAM episode pairs with the code
+  episode of the same seed, and the code arm's first frame must match the scan's (mean abs diff < FRAME_MAD_MAX on
+  0-255 RGB). (First written as pairing by shard/episode index; RoboTwin's expert check turned out not to be
+  deterministic on some tasks, so one flipped seed shifts the rest of a shard's stream. Same seed = same scene, so
+  the seed is the key; the index-pairing loss is reported as expert_check_divergence.)
 - WAM runs come in two configurations, told apart by the run name: A1 "wam-bf16-*" (L4: bf16, text encoder on CPU,
   all tasks; the comparison arm) and A0-ref "wam-fp32-*" (L40/L40S: the released fp32 precision, GATE tasks; its
   text encoder also runs on CPU, because moving the 7B encoder onto a 44 GB card for each instruction peaks at
@@ -108,14 +110,17 @@ def main(root):
     seeds, wam, ref = scan_seeds(root), wam_episodes(root, "bf16"), wam_episodes(root, "fp32")
     code, _ = code_episodes(root)
     fresh, fresh_locked = code_episodes(root, "fixloop-eval")
+    wam_s = {(k[0], k[1], v[0]): v[1] for k, v in wam.items()}
+    ref_s = {(k[0], k[1], v[0]): v[1] for k, v in ref.items()}
+    divergence = sum(1 for k, v in wam.items() if k in seeds and v[0] != seeds[k])
     pairs, dropped = {}, {"no_wam": 0, "no_code": 0, "seed_mismatch": 0, "frame_mismatch": 0, "no_frame": 0}
     mads, ref_mads = [], []
     for key, s in seeds.items():
-        if key not in wam:
+        if (key[0], key[1], s) not in wam_s:
             dropped["no_wam"] += 1; continue
         if key not in code:
             dropped["no_code"] += 1; continue
-        if wam[key][0] != s or code[key][0] != s:
+        if code[key][0] != s:
             dropped["seed_mismatch"] += 1; continue
         mad = frame_mad(root, key, code[key][3])
         if mad is None:
@@ -126,7 +131,7 @@ def main(root):
             ref_mads.append(other)
         if mad >= FRAME_MAD_MAX:
             dropped["frame_mismatch"] += 1; continue
-        pairs[key] = (wam[key][1], int(code[key][1]))
+        pairs[key] = (wam_s[(key[0], key[1], s)], int(code[key][1]))
 
     cells, rng = {}, np.random.default_rng(0)
     for t in TASKS:
@@ -162,10 +167,10 @@ def main(root):
         ok = len(cells_) == 2 * len(GATE) and bool(sum(c["p"] < 0.05 for c in cells_) <= 1 and abs(diff) <= 0.10)
         return {"cells": cells_, "pooled_diff": diff, "pass": ok}
 
-    dev = [(v, ref[k][1]) for k, v in wam.items() if k in ref and ref[k][0] == v[0] and k[0] in GATE]
-    n10 = sum(1 for (a, _), b in dev if a == 1 and b == 0)   # bf16 succeeded, fp32 failed
-    n01 = sum(1 for (a, _), b in dev if a == 0 and b == 1)
-    deviation = {"paired": len(dev), "bf16_rate": float(np.mean([a[1] for a, _ in dev])) if dev else None,
+    dev = [(a, ref_s[k]) for k, a in wam_s.items() if k in ref_s and k[0] in GATE]   # (bf16, fp32) per seed
+    n10 = sum(1 for a, b in dev if a == 1 and b == 0)
+    n01 = sum(1 for a, b in dev if a == 0 and b == 1)
+    deviation = {"paired": len(dev), "bf16_rate": float(np.mean([a for a, _ in dev])) if dev else None,
                  "fp32_rate": float(np.mean([b for _, b in dev])) if dev else None, "bf16_only": n10, "fp32_only": n01,
                  "mcnemar_p": binomtest(n01, n01 + n10).pvalue if n01 + n10 else 1.0}
 
@@ -191,7 +196,7 @@ def main(root):
         f_ok = [int(fresh[k][1]) for k in ks]
         vs = {}
         for name, other in (("shipped_program", {k: int(code[k][1]) for k in ks}),
-                            ("wam_bf16", {k: wam[k][1] for k in ks if k in wam and wam[k][0] == seeds[k]})):
+                            ("wam_bf16", {k: wam_s[(k[0], k[1], seeds[k])] for k in ks if (k[0], k[1], seeds[k]) in wam_s})):
             kk = list(other)
             n01 = sum(1 for k in kk if other[k] == 0 and fresh[k][1])
             n10 = sum(1 for k in kk if other[k] == 1 and not fresh[k][1])
@@ -202,6 +207,7 @@ def main(root):
     arm_f["locked_stage2"] = {"success": sum(r for *_, r in fresh_locked), "n": len(fresh_locked)}
 
     json.dump({"arm_f_fresh_fixloop": arm_f, "pairing": {"scanned": len(seeds), "paired": len(pairs), "dropped": dropped,
+                           "expert_check_divergence": divergence,
                            "frame_mad_median": float(np.median(mads)) if mads else None,
                            "frame_mad_max": float(np.max(mads)) if mads else None,
                            "frame_mad_other_scene_min": float(np.min(ref_mads)) if ref_mads else None,
