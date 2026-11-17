@@ -3,8 +3,12 @@ Written before any A1/A2 result existed. Rules:
 - Pairing: an episode pair counts only if the WAM shard's realized seed equals the seed scan's seed for that
   (task, protocol, shard, episode) and the code arm's first frame matches the scan's first frame
   (mean abs diff < FRAME_MAD_MAX on 0-255 RGB).
-- Gate A0 (tasks GATE): per cell, Fisher exact test of our 50 episodes vs the paper's Table 11 rate on 50 rollouts;
-  pass if at most 1 of the 8 cells has p < 0.05 and the pooled difference is within +-10 points.
+- WAM runs come in two configurations, told apart by the run name: A1 "wam-bf16-*" (L4: bf16, text encoder on CPU,
+  all tasks; the comparison arm) and A0-ref "wam-fp32-*" (L40/L40S: the released fp32 config, GATE tasks).
+- Gate A0 (tasks GATE), decided on A0-ref and also reported for A1: per cell, Fisher exact test of our 50 episodes
+  vs the paper's Table 11 rate on 50 rollouts; pass if at most 1 of the 8 cells has p < 0.05 and the pooled
+  difference is within +-10 points.
+- Deviation check: A1 vs A0-ref paired on the same scenes (exact McNemar pooled over the GATE cells).
 - Comparison: per (task, protocol) exact McNemar on discordant pairs, Holm-corrected; pooled mean of per-task
   differences (code - WAM, equal weight per task as RoboTwin reports) with a stratified paired bootstrap 95% CI.
 usage: analyze.py <results_root> > summary.json   (results_root holds seedscan-*, wam-eval-*, code-eval-*)
@@ -41,10 +45,10 @@ def scan_seeds(root):
     return seeds
 
 
-def wam_episodes(root):
+def wam_episodes(root, dtype):
     """(task, proto, shard, ep) -> (seed, success) from eval_policy's per-episode 'Success rate: a/b ... seed: N'."""
     best = {}   # a retried shard leaves several logs: keep the one with the most episodes
-    for f in glob.glob(f"{root}/wam-eval-*/logs/**/eval_*.log", recursive=True):
+    for f in glob.glob(f"{root}/wam-eval-*/logs/**/wam-{dtype}-*/eval_*.log", recursive=True):
         m = re.search(r"_(clean|randomized)_(\w+?)_g0_s(\d+)/", f)
         if not m:
             continue
@@ -93,7 +97,7 @@ def holm(ps):
 
 
 def main(root):
-    seeds, wam, code = scan_seeds(root), wam_episodes(root), code_episodes(root)
+    seeds, wam, ref, code = scan_seeds(root), wam_episodes(root, "bf16"), wam_episodes(root, "fp32"), code_episodes(root)
     pairs, dropped = {}, {"no_wam": 0, "no_code": 0, "seed_mismatch": 0, "frame_mismatch": 0, "no_frame": 0}
     mads, ref_mads = [], []
     for key, s in seeds.items():
@@ -107,9 +111,9 @@ def main(root):
         if mad is None:
             dropped["no_frame"] += 1; continue
         mads.append(mad)
-        ref = frame_mad(root, key, code[key][3], scan_ep=(key[3] + 1) % 10)
-        if ref is not None:
-            ref_mads.append(ref)
+        other = frame_mad(root, key, code[key][3], scan_ep=(key[3] + 1) % 10)
+        if other is not None:
+            ref_mads.append(other)
         if mad >= FRAME_MAD_MAX:
             dropped["frame_mismatch"] += 1; continue
         pairs[key] = (wam[key][1], int(code[key][1]))
@@ -134,17 +138,26 @@ def main(root):
     for k, a in zip(keys, holm(np.array([cells[k]["mcnemar_p"] for k in keys]))):
         cells[k]["mcnemar_p_holm"] = float(a)
 
-    gate = []
-    for t in GATE:
-        for p in PROTOS:
-            c = cells[f"{t}/{p}"]
-            if c["wam_n"]:
-                ours = round(c["wam_rate"] * c["wam_n"])
-                paper = round(c["paper_wam"] * 50)
-                pv = fisher_exact([[ours, c["wam_n"] - ours], [paper, 50 - paper]]).pvalue
-                gate.append({"cell": f"{t}/{p}", "ours": c["wam_rate"], "paper": c["paper_wam"], "p": pv})
-    pooled_gate = float(np.mean([g["ours"] - g["paper"] for g in gate])) if gate else None
-    gate_pass = bool(gate) and bool(sum(g["p"] < 0.05 for g in gate) <= 1 and abs(pooled_gate) <= 0.10)
+    def gate_of(arm):
+        cells_, n_sig = [], 0
+        for t in GATE:
+            for p in PROTOS:
+                w = [v[1] for k, v in arm.items() if k[0] == t and k[1] == p]
+                if not w:
+                    continue
+                ours, paper = sum(w), round(PAPER[t][PROTOS.index(p)] / 100 * 50)
+                pv = fisher_exact([[ours, len(w) - ours], [paper, 50 - paper]]).pvalue
+                cells_.append({"cell": f"{t}/{p}", "n": len(w), "ours": ours / len(w), "paper": paper / 50, "p": pv})
+        diff = float(np.mean([c["ours"] - c["paper"] for c in cells_])) if cells_ else None
+        ok = len(cells_) == 2 * len(GATE) and bool(sum(c["p"] < 0.05 for c in cells_) <= 1 and abs(diff) <= 0.10)
+        return {"cells": cells_, "pooled_diff": diff, "pass": ok}
+
+    dev = [(v, ref[k][1]) for k, v in wam.items() if k in ref and ref[k][0] == v[0] and k[0] in GATE]
+    n10 = sum(1 for (a, _), b in dev if a == 1 and b == 0)   # bf16 succeeded, fp32 failed
+    n01 = sum(1 for (a, _), b in dev if a == 0 and b == 1)
+    deviation = {"paired": len(dev), "bf16_rate": float(np.mean([a[1] for a, _ in dev])) if dev else None,
+                 "fp32_rate": float(np.mean([b for _, b in dev])) if dev else None, "bf16_only": n10, "fp32_only": n01,
+                 "mcnemar_p": binomtest(n01, n01 + n10).pvalue if n01 + n10 else 1.0}
 
     pooled = {}
     for p in PROTOS + ("both",):
@@ -166,7 +179,7 @@ def main(root):
                            "frame_mad_max": float(np.max(mads)) if mads else None,
                            "frame_mad_other_scene_min": float(np.min(ref_mads)) if ref_mads else None,
                            "frame_mad_other_scene_median": float(np.median(ref_mads)) if ref_mads else None},
-               "gate": {"cells": gate, "pooled_diff": pooled_gate, "pass": gate_pass},
+               "gate_released_fp32": gate_of(ref), "gate_a1_bf16": gate_of(wam), "deviation_bf16_vs_fp32": deviation,
                "cells": cells, "pooled": pooled}, sys.stdout, indent=1)
 
 
